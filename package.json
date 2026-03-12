@@ -1,0 +1,17 @@
+{
+  "name": "marketplace-monorepo",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev:backend": "npm --workspace backend run start:dev",
+    "dev:frontend": "npm --workspace frontend run dev",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "install:all": "npm install --workspaces"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  }
+}
