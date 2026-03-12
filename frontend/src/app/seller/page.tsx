@@ -21,7 +21,9 @@ export default function SellerPage() {
           Добавить товар
         </Link>
       </div>
-
+      <div style={{ marginBottom: 20 }}>
+        <Link href="/seller/orders">Заказы покупателей</Link>
+      </div>
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-2xl border bg-white p-6">Товаров: {products.length}</div>
         <div className="rounded-2xl border bg-white p-6">Заказов: {orders.length}</div>

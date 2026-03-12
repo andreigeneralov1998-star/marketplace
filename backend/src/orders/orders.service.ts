@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -71,14 +72,95 @@ export class OrdersService {
     });
   }
 
-  buyerOrders(userId: string) {
-    return this.prisma.order.findMany({
+  async buyerOrders(userId: string) {
+    const orders = await this.prisma.order.findMany({
       where: { userId },
       include: { items: true },
       orderBy: { createdAt: 'desc' },
     });
+
+    return orders.map((order) => ({
+      ...order,
+      totalAmount: Number(order.totalAmount),
+      items: order.items.map((item) => ({
+        ...item,
+        priceSnapshot: Number(item.priceSnapshot),
+      })),
+    }));
+  }
+  async sellerOrderById(userId: string, orderId: string) {
+    const order = await this.prisma.order.findFirst({
+      where: {
+        id: orderId,
+        items: {
+          some: { sellerId: userId },
+        },
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+          },
+        },
+        items: {
+          where: { sellerId: userId },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    const sellerTotal = order.items.reduce((sum, item) => {
+      return sum + Number(item.priceSnapshot) * item.quantity;
+    }, 0);
+
+    return {
+      ...order,
+      totalAmount: Number(order.totalAmount),
+      sellerTotal,
+      items: order.items.map((item) => ({
+        ...item,
+        priceSnapshot: Number(item.priceSnapshot),
+      })),
+    };
   }
 
+  async orderById(orderId: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+          },
+        },
+        items: true,
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    return {
+      ...order,
+      totalAmount: Number(order.totalAmount),
+      items: order.items.map((item) => ({
+        ...item,
+        priceSnapshot: Number(item.priceSnapshot),
+      })),
+    };
+  }
   async myHistory(userId: string) {
     const dateFrom = new Date();
     dateFrom.setDate(dateFrom.getDate() - 30);
@@ -120,8 +202,8 @@ export class OrdersService {
     }));
   }
 
-  sellerOrders(userId: string) {
-    return this.prisma.order.findMany({
+  async sellerOrders(userId: string) {
+    const orders = await this.prisma.order.findMany({
       where: {
         items: {
           some: { sellerId: userId },
@@ -143,16 +225,50 @@ export class OrdersService {
       },
       orderBy: { createdAt: 'desc' },
     });
+
+    return orders.map((order) => {
+      const sellerTotal = order.items.reduce((sum, item) => {
+        return sum + Number(item.priceSnapshot) * item.quantity;
+      }, 0);
+
+      return {
+        ...order,
+        totalAmount: Number(order.totalAmount),
+        sellerTotal,
+        items: order.items.map((item) => ({
+          ...item,
+          priceSnapshot: Number(item.priceSnapshot),
+        })),
+      };
+    });
   }
 
-  allOrders() {
-    return this.prisma.order.findMany({
+  async allOrders() {
+    const orders = await this.prisma.order.findMany({
       include: {
-        user: true,
+        user: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+            role: true,
+          },
+        },
         items: true,
       },
       orderBy: { createdAt: 'desc' },
     });
+
+    return orders.map((order) => ({
+      ...order,
+      totalAmount: Number(order.totalAmount),
+      items: order.items.map((item) => ({
+        ...item,
+        priceSnapshot: Number(item.priceSnapshot),
+      })),
+    }));
   }
 
   async updateStatus(orderId: string, dto: UpdateOrderStatusDto) {
@@ -164,10 +280,29 @@ export class OrdersService {
       throw new NotFoundException('Order not found');
     }
 
-    return this.prisma.order.update({
-      where: { id: orderId },
-      data: { status: dto.status },
+    const updatedOrder = await this.prisma.$transaction(async (tx) => {
+      await tx.orderItem.updateMany({
+        where: { orderId },
+        data: { status: dto.status },
+      });
+
+      return tx.order.update({
+        where: { id: orderId },
+        data: { status: dto.status },
+        include: {
+          items: true,
+        },
+      });
     });
+
+    return {
+      ...updatedOrder,
+      totalAmount: Number(updatedOrder.totalAmount),
+      items: updatedOrder.items.map((item) => ({
+        ...item,
+        priceSnapshot: Number(item.priceSnapshot),
+      })),
+    };
   }
 
   async updateSellerItemStatus(
@@ -184,7 +319,7 @@ export class OrdersService {
     }
 
     if (item.sellerId !== userId) {
-      throw new BadRequestException('You can update only your own items');
+      throw new ForbiddenException('You can update only your own items');
     }
 
     const updatedItem = await this.prisma.orderItem.update({
@@ -198,31 +333,7 @@ export class OrdersService {
     });
 
     const statuses = orderItems.map((i) => i.status);
-
-    let orderStatus: OrderStatus = OrderStatus.PENDING;
-
-    if (statuses.every((s) => s === OrderStatus.DELIVERED)) {
-      orderStatus = OrderStatus.DELIVERED;
-    } else if (statuses.every((s) => s === OrderStatus.CANCELLED)) {
-      orderStatus = OrderStatus.CANCELLED;
-    } else if (
-      statuses.every(
-        (s) => s === OrderStatus.SHIPPED || s === OrderStatus.DELIVERED,
-      )
-    ) {
-      orderStatus = OrderStatus.SHIPPED;
-    } else if (
-      statuses.some(
-        (s) =>
-          s === OrderStatus.PROCESSING ||
-          s === OrderStatus.SHIPPED ||
-          s === OrderStatus.DELIVERED,
-      )
-    ) {
-      orderStatus = OrderStatus.PROCESSING;
-    } else if (statuses.every((s) => s === OrderStatus.PAID)) {
-      orderStatus = OrderStatus.PAID;
-    }
+    const orderStatus = this.calculateOrderStatus(statuses);
 
     await this.prisma.order.update({
       where: { id: item.orderId },
@@ -230,5 +341,32 @@ export class OrdersService {
     });
 
     return updatedItem;
+  }
+  private calculateOrderStatus(statuses: OrderStatus[]): OrderStatus {
+    if (statuses.every((s) => s === OrderStatus.DELIVERED)) {
+      return OrderStatus.DELIVERED;
+    }
+
+    if (statuses.every((s) => s === OrderStatus.CANCELLED)) {
+      return OrderStatus.CANCELLED;
+    }
+
+    if (statuses.every((s) => s === OrderStatus.SHIPPED || s === OrderStatus.DELIVERED)) {
+      return OrderStatus.SHIPPED;
+    }
+
+    if (statuses.some((s) =>
+      s === OrderStatus.PROCESSING ||
+      s === OrderStatus.SHIPPED ||
+      s === OrderStatus.DELIVERED
+    )) {
+      return OrderStatus.PROCESSING;
+    }
+
+    if (statuses.some((s) => s === OrderStatus.PAID)) {
+      return OrderStatus.PAID;
+    }
+
+    return OrderStatus.PENDING;
   }
 }
