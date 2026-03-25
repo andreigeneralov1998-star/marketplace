@@ -13,6 +13,12 @@ enum Role {
   ADMIN
 }
 
+enum ProductModerationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum OrderStatus {
   PENDING
   PAID
@@ -20,98 +26,219 @@ enum OrderStatus {
   SHIPPED
   DELIVERED
   CANCELLED
+  OUT_OF_STOCK
+}
+
+enum DeliveryMethod {
+  EMS
+  EUROPOCHTA
+  BELPOCHTA
+  PICKUP_TOPSET
+}
+
+enum SellerWithdrawalMethod {
+  TOPSET_BALANCE
+  TOPSET_CASH
+}
+
+enum SellerWithdrawalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model SellerWithdrawalRequest {
+  id                 String                   @id @default(cuid())
+  sellerId           String
+  amount             Int
+  method             SellerWithdrawalMethod
+  status             SellerWithdrawalStatus   @default(PENDING)
+
+  topsetAccountName  String?
+  pickupLocation     String?
+  comment            String?
+
+  processedAt        DateTime?
+  processedByAdminId String?
+
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  seller             User                     @relation("SellerWithdrawalRequests", fields: [sellerId], references: [id])
+  processedByAdmin   User?                    @relation("ProcessedSellerWithdrawalRequests", fields: [processedByAdminId], references: [id])
+
+  @@index([sellerId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model User {
-  id               String         @id @default(cuid())
-  email            String         @unique
+  id               String  @id @default(cuid())
+  username         String  @unique
+  email            String  @unique
   passwordHash     String
-  firstName        String?
-  lastName         String?
-  phone            String?
-  role             Role           @default(BUYER)
-  isSellerApproved Boolean        @default(false)
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  fullName         String?
+  role             Role    @default(BUYER)
+  isSellerApproved Boolean @default(false)
 
-  products         Product[]
-  cartItems        CartItem[]
-  orders           Order[]
-  refreshTokens    RefreshToken[]
+  storeName        String?
+  storeSlug        String? @unique
+  storeDescription String?
+  storeLogo        String?
+
+  // новые поля профиля Seller
+  lastName         String?
+  firstName        String?
+  middleName       String?
+  phone            String?
+  city             String?
+  warehouseAddress String?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  withdrawalRequests          SellerWithdrawalRequest[] @relation("SellerWithdrawalRequests")
+  processedWithdrawalRequests SellerWithdrawalRequest[] @relation("ProcessedSellerWithdrawalRequests")
+
+  products                  Product[]
+  cartItems                 CartItem[]
+  buyerOrders               Order[] @relation("BuyerOrders")
+  sellerOrders              Order[] @relation("SellerOrders")
+  refreshTokens             RefreshToken[]
+  sellerBalance             SellerBalance?
+  sellerBalanceTransactions SellerBalanceTransaction[]
+  isProfileComplete         Boolean @default(false)
+}
+
+model SellerBalance {
+  id        String   @id @default(cuid())
+  sellerId  String   @unique
+  amount    Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  seller User @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+}
+
+model SellerBalanceTransaction {
+  id          String                       @id @default(cuid())
+  sellerId    String
+  orderId     String?
+  type        SellerBalanceTransactionType
+  orderItemId String?
+  amount      Int
+  description String?
+  createdAt   DateTime                     @default(now())
+
+  seller    User       @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  order     Order?     @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderItem OrderItem? @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+
+  @@unique([orderItemId, type])
+  @@index([sellerId, createdAt])
+  @@index([orderId])
+  @@index([orderItemId])
+}
+
+enum SellerBalanceTransactionType {
+  CREDIT_ORDER_SHIPPED
+  DEBIT_ADJUSTMENT
+  CREDIT_ADJUSTMENT
+  DEBIT_WITHDRAWAL_APPROVED
 }
 
 model Category {
-  id          String    @id @default(cuid())
-  name        String    @unique
-  slug        String    @unique
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  products    Product[]
+  products Product[]
 }
 
 model Product {
-  id            String         @id @default(cuid())
-  title         String
-  slug          String         @unique
-  description   String
-  specs         Json?
-  price         Decimal
-  stock         Int            @default(0)
-  sku           String         @unique
-  isPublished   Boolean        @default(true)
-  sellerId      String
-  categoryId    String
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id               String  @id @default(cuid())
+  title            String
+  slug             String  @unique
+  sku              String  @unique
+  description      String
+  compatibleModels String?
+  price            Decimal
+  stock            Int     @default(0)
 
-  seller        User           @relation(fields: [sellerId], references: [id])
-  imageUrl      String?
-  category      Category       @relation(fields: [categoryId], references: [id])
-  images        ProductImage[]
-  cartItems     CartItem[]
-  orderItems    OrderItem[]
+  isPublished       Boolean                 @default(false)
+  moderationStatus  ProductModerationStatus @default(PENDING)
+  moderationComment String?
+
+  imageUrl String?
+  specs    Json?
+
+  sellerId   String
+  categoryId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  seller     User           @relation(fields: [sellerId], references: [id])
+  category   Category       @relation(fields: [categoryId], references: [id])
+  images     ProductImage[]
+  orderItems OrderItem[]
+  cartItems  CartItem[]
 }
 
 model ProductImage {
-  id        String   @id @default(cuid())
-  url       String
-  position  Int      @default(0)
+  id       String @id @default(cuid())
+  url      String
+  position Int    @default(0)
 
-  product   Product  @relation(fields: [productId], references: [id])
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
   productId String
 
   createdAt DateTime @default(now())
 }
 
 model CartItem {
-  id         String   @id @default(cuid())
-  userId     String
-  productId  String
-  quantity   Int      @default(1)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(cuid())
+  userId    String
+  productId String
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([userId, productId])
 }
 
 model Order {
-  id            String       @id @default(cuid())
-  userId        String
-  status        OrderStatus  @default(PENDING)
-  totalAmount   Decimal
-  fullName      String
-  phone         String
-  address       String
-  comment       String?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id       String      @id @default(cuid())
+  userId   String
+  sellerId String?
+  status   OrderStatus @default(PENDING)
+  total    Decimal
 
-  user          User         @relation(fields: [userId], references: [id])
-  items         OrderItem[]
+  fullName       String?
+  phone          String?
+  deliveryMethod DeliveryMethod?
+  city           String?
+  street         String?
+  house          String?
+  apartment      String?
+  comment        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user                      User                       @relation("BuyerOrders", fields: [userId], references: [id])
+  seller                    User?                       @relation("SellerOrders", fields: [sellerId], references: [id])
+  items                     OrderItem[]
+  sellerBalanceTransactions SellerBalanceTransaction[]
+
+  @@index([status])
+  @@index([userId, createdAt])
+  @@index([sellerId, createdAt])
 }
 
 model OrderItem {
@@ -125,16 +252,22 @@ model OrderItem {
   quantity      Int
   status        OrderStatus @default(PENDING)
 
-  order   Order   @relation(fields: [orderId], references: [id])
-  product Product @relation(fields: [productId], references: [id])
+  order               Order                      @relation(fields: [orderId], references: [id])
+  product             Product                    @relation(fields: [productId], references: [id])
+  balanceTransactions SellerBalanceTransaction[]
+
+  @@index([sellerId])
+  @@index([orderId])
+  @@index([status])
+  @@index([sellerId, status])
 }
 
 model RefreshToken {
-  id         String   @id @default(cuid())
-  token      String   @unique
-  userId     String
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

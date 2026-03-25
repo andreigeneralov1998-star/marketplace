@@ -25,11 +25,34 @@ export function RegisterForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 rounded-2xl border bg-white p-6 shadow-sm">
-      <input {...register('firstName')} placeholder="Имя" className="w-full rounded-xl border px-4 py-3" />
-      <input {...register('lastName')} placeholder="Фамилия" className="w-full rounded-xl border px-4 py-3" />
-      <input {...register('phone')} placeholder="Телефон" className="w-full rounded-xl border px-4 py-3" />
-      <input {...register('email')} placeholder="Email" className="w-full rounded-xl border px-4 py-3" />
+    <form
+      onSubmit={handleSubmit(onSubmit)}
+      className="space-y-4 rounded-2xl border bg-white p-6 shadow-sm"
+    >
+      <input
+        {...register('fullName')}
+        placeholder="ФИО полностью"
+        className="w-full rounded-xl border px-4 py-3"
+      />
+
+      <input
+        {...register('username')}
+        placeholder="Логин"
+        className="w-full rounded-xl border px-4 py-3"
+      />
+
+      <input
+        {...register('phone')}
+        placeholder="Номер телефона"
+        className="w-full rounded-xl border px-4 py-3"
+      />
+
+      <input
+        {...register('email')}
+        placeholder="Электронная почта"
+        className="w-full rounded-xl border px-4 py-3"
+      />
+
       <input
         type="password"
         {...register('password')}
@@ -38,10 +61,15 @@ export function RegisterForm() {
       />
 
       {Object.values(errors).map((error, index) => (
-        <p key={index} className="text-sm text-red-500">{error?.message as string}</p>
+        <p key={index} className="text-sm text-red-500">
+          {error?.message as string}
+        </p>
       ))}
 
-      <button disabled={isSubmitting} className="w-full rounded-xl bg-black px-4 py-3 text-white">
+      <button
+        disabled={isSubmitting}
+        className="w-full rounded-xl bg-black px-4 py-3 text-white"
+      >
         Зарегистрироваться
       </button>
     </form>

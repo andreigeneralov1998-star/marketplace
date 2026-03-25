@@ -15,14 +15,33 @@ export default function SellerPage() {
 
   return (
     <section className="space-y-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Кабинет продавца</h1>
-        <Link href="/seller/products/new" className="rounded-xl bg-black px-5 py-3 text-white">
+      <div className="flex items-center gap-3">
+        <Link
+          href="/seller/products/new"
+          className="rounded-xl bg-black px-5 py-3 text-white"
+        >
           Добавить товар
         </Link>
+
+        <Link
+          href="/seller/products/import"
+          className="rounded-xl border border-black px-5 py-3 text-black"
+        >
+          Загрузка через Excel
+        </Link>
       </div>
-      <div style={{ marginBottom: 20 }}>
-        <Link href="/seller/orders">Заказы покупателей</Link>
+      <div className="mb-5 flex flex-wrap gap-4">
+        <Link href="/seller/orders" className="rounded-xl border px-4 py-2">
+          Заказы покупателей
+        </Link>
+
+        <Link href="/seller/balance" className="rounded-xl border px-4 py-2">
+          Баланс
+        </Link>
+
+        <Link href="/seller/profile" className="rounded-xl border px-4 py-2">
+          Профиль
+        </Link>
       </div>
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-2xl border bg-white p-6">Товаров: {products.length}</div>

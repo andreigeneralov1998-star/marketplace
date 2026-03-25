@@ -20,14 +20,23 @@ export function LoginForm() {
   });
 
   const onSubmit = async (values: z.infer<typeof loginSchema>) => {
-    await login(values.email, values.password);
+    await login(values.username, values.password);
     router.push('/account');
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 rounded-2xl border bg-white p-6 shadow-sm">
-      <input {...register('email')} placeholder="Email" className="w-full rounded-xl border px-4 py-3" />
-      {errors.email && <p className="text-sm text-red-500">{errors.email.message}</p>}
+    <form
+      onSubmit={handleSubmit(onSubmit)}
+      className="space-y-4 rounded-2xl border bg-white p-6 shadow-sm"
+    >
+      <input
+        {...register('username')}
+        placeholder="Логин"
+        className="w-full rounded-xl border px-4 py-3"
+      />
+      {errors.username && (
+        <p className="text-sm text-red-500">{errors.username.message}</p>
+      )}
 
       <input
         type="password"
@@ -35,9 +44,14 @@ export function LoginForm() {
         placeholder="Пароль"
         className="w-full rounded-xl border px-4 py-3"
       />
-      {errors.password && <p className="text-sm text-red-500">{errors.password.message}</p>}
+      {errors.password && (
+        <p className="text-sm text-red-500">{errors.password.message}</p>
+      )}
 
-      <button disabled={isSubmitting} className="w-full rounded-xl bg-black px-4 py-3 text-white">
+      <button
+        disabled={isSubmitting}
+        className="w-full rounded-xl bg-black px-4 py-3 text-white"
+      >
         Войти
       </button>
     </form>

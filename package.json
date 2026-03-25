@@ -12,6 +12,13 @@
     "install:all": "npm install --workspaces"
   },
   "devDependencies": {
+    "@types/multer": "^2.1.0",
     "concurrently": "^9.0.1"
+  },
+  "dependencies": {
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.4",
+    "multer": "^2.1.1",
+    "sharp": "^0.34.5"
   }
 }

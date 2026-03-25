@@ -8,7 +8,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
-import { Role } from '@prisma/client';
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -17,33 +17,48 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
-    const exists = await this.prisma.user.findUnique({
-      where: { email: dto.email },
+    const email = dto.email.trim().toLowerCase();
+    const username = dto.username.trim().toLowerCase();
+    const fullName = dto.fullName.trim();
+    const phone = dto.phone.trim();
+
+    const existsByEmail = await this.prisma.user.findUnique({
+      where: { email },
     });
 
-    if (exists) {
+    if (existsByEmail) {
       throw new BadRequestException('Email already registered');
+    }
+
+    const existsByUsername = await this.prisma.user.findUnique({
+      where: { username },
+    });
+
+    if (existsByUsername) {
+      throw new BadRequestException('Username already taken');
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
     const user = await this.prisma.user.create({
       data: {
-        email: dto.email,
+        email,
+        username,
+        fullName,
+        phone,
         passwordHash,
-        firstName: dto.firstName,
-        lastName: dto.lastName,
-        phone: dto.phone,
         role: 'BUYER',
       },
     });
 
-    return this.issueTokens(user.id, user.email, user.role);
+    return this.issueTokens(user.id, user.email, user.role, user.username);
   }
 
   async login(dto: LoginDto) {
+    const username = dto.username.trim().toLowerCase();
+
     const user = await this.prisma.user.findUnique({
-      where: { email: dto.email },
+      where: { username },
     });
 
     if (!user) {
@@ -56,7 +71,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    return this.issueTokens(user.id, user.email, user.role);
+    return this.issueTokens(user.id, user.email, user.role, user.username);
   }
 
   async me(userId: string) {
@@ -64,9 +79,9 @@ export class AuthService {
       where: { id: userId },
       select: {
         id: true,
+        username: true,
         email: true,
-        firstName: true,
-        lastName: true,
+        fullName: true,
         phone: true,
         role: true,
         isSellerApproved: true,
@@ -74,8 +89,13 @@ export class AuthService {
     });
   }
 
-  private async issueTokens(userId: string, email: string, role: string) {
-    const payload = { sub: userId, email, role };
+  private async issueTokens(
+    userId: string,
+    email: string,
+    role: string,
+    username: string,
+  ) {
+    const payload = { sub: userId, email, role, username };
 
     const accessToken = await this.jwtService.signAsync(payload, {
       secret: process.env.JWT_ACCESS_SECRET,

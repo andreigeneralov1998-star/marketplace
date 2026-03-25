@@ -1,25 +1,29 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
-import { CategoriesModule } from './categories/categories.module';
 import { ProductsModule } from './products/products.module';
-import { CartModule } from './cart/cart.module';
 import { OrdersModule } from './orders/orders.module';
-import { AdminModule } from './admin/admin.module';
+import { StoresModule } from './stores/stores.module';
+import { PrismaModule } from './prisma/prisma.module';
+import { CategoriesModule } from './categories/categories.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { CartModule } from './cart/cart.module';
+import { SellerBalanceModule } from './seller-balance/seller-balance.module';
+import { SellerWithdrawalsModule } from './seller-withdrawals/seller-withdrawals.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
+    SellerBalanceModule,
     AuthModule,
-    CategoriesModule,
     ProductsModule,
-    CartModule,
     OrdersModule,
-    AdminModule,
+    StoresModule,
+    CategoriesModule,
     UploadsModule,
+    UsersModule,
+    CartModule,
+    SellerWithdrawalsModule,
   ],
 })
 export class AppModule {}

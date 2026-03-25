@@ -4,42 +4,32 @@ import * as bcrypt from 'bcrypt';
 const prisma = new PrismaClient();
 
 async function main() {
-  const passwordHash = await bcrypt.hash('admin123', 10);
+  const passwordHash = await bcrypt.hash('12345678', 10);
 
   await prisma.user.upsert({
     where: { email: 'admin@example.com' },
-    update: {},
-    create: {
-      email: 'admin@example.com',
+    update: {
+      username: 'admin',
+      fullName: 'System Admin',
+      phone: '+375000000000',
       passwordHash,
       role: 'ADMIN',
-      isSellerApproved: true,
-      firstName: 'System',
-      lastName: 'Admin',
+    },
+    create: {
+      username: 'admin',
+      email: 'admin@example.com',
+      fullName: 'System Admin',
+      phone: '+375000000000',
+      passwordHash,
+      role: 'ADMIN',
     },
   });
 
-  const categories = [
-    { name: 'Электроника', slug: 'electronics' },
-    { name: 'Аксессуары', slug: 'accessories' },
-    { name: 'Запчасти', slug: 'parts' },
-  ];
-
-  for (const category of categories) {
-    await prisma.category.upsert({
-      where: { slug: category.slug },
-      update: {},
-      create: category,
-    });
-  }
+  console.log('Admin seeded');
 }
 
 main()
-  .then(async () => {
+  .catch(console.error)
+  .finally(async () => {
     await prisma.$disconnect();
-  })
-  .catch(async (error) => {
-    console.error(error);
-    await prisma.$disconnect();
-    process.exit(1);
   });

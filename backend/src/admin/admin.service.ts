@@ -10,9 +10,9 @@ export class AdminService {
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
+        fullName: true,
+        username: true,
         email: true,
-        firstName: true,
-        lastName: true,
         phone: true,
         role: true,
         isSellerApproved: true,

@@ -1,6 +1,9 @@
 import {
   Body,
   Controller,
+  UploadedFile,
+  Res,
+  BadRequestException,
   Delete,
   Get,
   Param,
@@ -17,7 +20,8 @@ import { QueryProductsDto } from './dto/query-products.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 
@@ -45,6 +49,33 @@ export class ProductsController {
   sellerProducts(@Req() req: { user: { userId: string } }) {
     return this.productsService.findSellerProducts(req.user.userId);
   }
+  @Get('seller/csv-template')
+  @UseGuards(JwtAuthGuard)
+  downloadSellerCsvTemplate(@Res() res: Response) {
+    const csv = this.productsService.getSellerCsvTemplate();
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="products-template.csv"',
+    );
+
+    return res.send('\uFEFF' + csv);
+  }
+
+  @Post('seller/bulk-upload')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadSellerProductsCsv(
+    @Req() req: { user: { userId: string } },
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Файл не загружен');
+    }
+
+    return this.productsService.bulkUploadFromCsv(req.user.userId, file);
+  }
 
   @Get(':slug')
   findOne(@Param('slug') slug: string) {
@@ -59,21 +90,31 @@ export class ProductsController {
   ) {
     return this.productsService.create(req.user.userId, dto);
   }
+
   @Post(':id/images')
+  @UseGuards(JwtAuthGuard)
   @UseInterceptors(
-    FilesInterceptor('images', 10, {
+    FilesInterceptor('images', 3, {
       storage: diskStorage({
         destination: './uploads/products',
         filename: editFileName,
       }),
     }),
   )
+
   uploadProductImages(
+    @Req() req: { user: { userId: string; role: string } },
     @Param('id') id: string,
     @UploadedFiles() files: Express.Multer.File[],
   ) {
-    return this.productsService.addImages(id, files);
+    return this.productsService.addImages(
+      req.user.userId,
+      req.user.role,
+      id,
+      files,
+    );
   }
+
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
   update(
@@ -86,7 +127,10 @@ export class ProductsController {
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard)
-  remove(@Req() req: { user: { userId: string; role: string } }, @Param('id') id: string) {
+  remove(
+    @Req() req: { user: { userId: string; role: string } },
+    @Param('id') id: string,
+  ) {
     return this.productsService.remove(req.user.userId, req.user.role, id);
   }
 }

@@ -19,7 +19,7 @@ export default function HomePage() {
           >
             Перейти в каталог
           </Link>
-
+          <Link href="/stores">Магазины</Link>
           <Link
             href="/register"
             className="rounded-xl border px-5 py-3"

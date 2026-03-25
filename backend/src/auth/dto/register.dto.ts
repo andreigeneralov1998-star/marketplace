@@ -1,22 +1,32 @@
-import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsString,
+  Matches,
+  MinLength,
+} from 'class-validator';
 
 export class RegisterDto {
-  @IsEmail()
-  email!: string;
+  @IsString()
+  @IsNotEmpty()
+  fullName!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(3)
+  @Matches(/^[a-zA-Z0-9_]+$/, {
+    message: 'Логин может содержать только латинские буквы, цифры и знак подчёркивания',
+  })
+  username!: string;
 
   @IsString()
   @MinLength(6)
   password!: string;
 
-  @IsOptional()
   @IsString()
-  firstName?: string;
+  @IsNotEmpty()
+  phone!: string;
 
-  @IsOptional()
-  @IsString()
-  lastName?: string;
-
-  @IsOptional()
-  @IsString()
-  phone?: string;
+  @IsEmail()
+  email!: string;
 }
