@@ -1,121 +1,79 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
+import { api } from '@/lib/api';
+import { cn } from '@/lib/utils';
+import { useAuthStore } from '@/store/auth-store';
 import type { ProductDetails } from '@/types';
-import { createPortal } from "react-dom";
 
-export default function AddToCartButton({ product }: { product: ProductDetails }) {
-  const [showAuthModal, setShowAuthModal] = useState(false);
+type AddToCartButtonProps = {
+  product: ProductDetails;
+  className?: string;
+};
+
+export default function AddToCartButton({
+  product,
+  className,
+}: AddToCartButtonProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const user = useAuthStore((state) => state.user);
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleAdd = async () => {
+    if (!user) {
+      const redirect = encodeURIComponent(pathname || `/product/${product.slug}`);
+      router.push(`/login?redirect=${redirect}`);
+      return;
+    }
+
     try {
-      const token = localStorage.getItem('accessToken');
+      setIsSubmitting(true);
 
-      if (!token) {
-        setShowAuthModal(true);
-        return;
-      }
-
-      const res = await fetch('http://localhost:4000/api/cart', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          productId: product.id,
-          quantity: 1,
-        }),
+      await api.post('/cart', {
+        productId: product.id,
+        quantity: 1,
       });
 
-      if (res.ok) {
-        toast.success('Товар добавлен в корзину');
-        return;
-      }
+      toast.success('Товар добавлен в корзину');
+    } catch (error: any) {
+      const status = error?.response?.status;
 
-      if (res.status === 401) {
+      if (status === 401) {
         localStorage.removeItem('accessToken');
-        setShowAuthModal(true);
+        const redirect = encodeURIComponent(pathname || `/product/${product.slug}`);
+        router.push(`/login?redirect=${redirect}`);
         return;
       }
 
-      let message = 'Ошибка добавления в корзину';
-
-      try {
-        const error = await res.json();
-        message =
-          typeof error?.message === 'string'
-            ? error.message
-            : Array.isArray(error?.message)
-            ? error.message.join(', ')
-            : message;
-      } catch {}
+      const message =
+        typeof error?.response?.data?.message === 'string'
+          ? error.response.data.message
+          : Array.isArray(error?.response?.data?.message)
+            ? error.response.data.message.join(', ')
+            : 'Ошибка добавления в корзину';
 
       toast.error(message);
-    } catch (error) {
-      console.error('Ошибка добавления в корзину:', error);
-      toast.error('Сервер недоступен или произошла ошибка сети');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <>
-      <button
-        type="button"
-        onClick={handleAdd}
-        className="mt-6 rounded-xl bg-black px-6 py-3 text-white transition hover:opacity-90"
-      >
-        Добавить в корзину
-      </button>
-
-      {showAuthModal &&
-        typeof window !== "undefined" &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-            onClick={() => setShowAuthModal(false)}
-          >
-            <div
-              className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h2 className="text-xl font-semibold">
-                Для заказа войдите или зарегистрируйтесь
-              </h2>
-
-              <p className="mt-2 text-sm text-slate-600">
-                Чтобы добавить товар в корзину, нужно войти в аккаунт
-              </p>
-
-              <div className="mt-6 flex gap-3">
-                <Link
-                  href="/login"
-                  className="flex-1 rounded-xl bg-black px-4 py-2 text-center text-white"
-                >
-                  Вход
-                </Link>
-
-                <Link
-                  href="/register"
-                  className="flex-1 rounded-xl border px-4 py-2 text-center"
-                >
-                  Регистрация
-                </Link>
-              </div>
-
-              <button
-                onClick={() => setShowAuthModal(false)}
-                className="mt-4 w-full text-sm text-slate-500"
-              >
-                Закрыть
-              </button>
-            </div>
-          </div>,
-          document.body
-        )
-      }
-    </>
+    <button
+      type="button"
+      onClick={handleAdd}
+      disabled={isSubmitting}
+      className={cn(
+        'inline-flex h-12 items-center justify-center rounded-xl bg-[#F5A623] px-6 text-sm font-semibold text-[#111827] transition',
+        'hover:bg-[#E69512] disabled:cursor-not-allowed disabled:opacity-60',
+        className
+      )}
+    >
+      {isSubmitting ? 'Добавление...' : 'Добавить в корзину'}
+    </button>
   );
 }

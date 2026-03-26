@@ -3,12 +3,14 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/store/auth-store';
 import { loginSchema } from '@/schemas/auth.schemas';
 
 export function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get('redirect') || '/account';
   const { login } = useAuthStore();
 
   const {
@@ -21,7 +23,7 @@ export function LoginForm() {
 
   const onSubmit = async (values: z.infer<typeof loginSchema>) => {
     await login(values.username, values.password);
-    router.push('/account');
+    router.push(redirectTo);
   };
 
   return (

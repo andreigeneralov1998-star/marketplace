@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import AddToCartButton from '@/components/AddToCartButton';
 import type { ProductDetails } from '@/types';
 
@@ -13,6 +14,11 @@ function getSellerDisplayName(seller: {
 
   const fullName = `${seller.firstName ?? ''} ${seller.lastName ?? ''}`.trim();
   return fullName || 'Продавец';
+}
+
+function normalizeImageSrc(src?: string | null) {
+  if (!src) return '/uploads/placeholders/no-photo.png';
+  return src.startsWith('http') ? src : `http://localhost:4000${src}`;
 }
 
 async function getProduct(slug: string): Promise<ProductDetails> {
@@ -39,110 +45,169 @@ export default async function ProductPage({
     ? getSellerDisplayName(product.seller)
     : 'Продавец';
 
-  const rawMainImage =
-    product.images?.[0]?.url ||
-    product.imageUrl ||
-    '/uploads/placeholders/no-photo.png';
+  const gallery =
+    product.images && product.images.length > 0
+      ? product.images.map((img) => ({
+          id: img.id,
+          url: normalizeImageSrc(img.url),
+        }))
+      : [
+          {
+            id: 'fallback',
+            url: normalizeImageSrc(product.imageUrl),
+          },
+        ];
 
-  const mainImageSrc = rawMainImage.startsWith('http')
-    ? rawMainImage
-    : `http://localhost:4000${rawMainImage}`;
+  const mainImage = gallery[0]?.url || '/uploads/placeholders/no-photo.png';
+  const inStock = product.stock > 0;
 
   return (
-    <section className="grid gap-8 lg:grid-cols-2">
-      <div>
-        <Link href="/catalog" className="mb-4 inline-block text-sm underline">
-          ← Назад в каталог
+    <section className="mx-auto w-full max-w-[1320px] px-4 py-6 md:px-6 md:py-8">
+      <div className="mb-5">
+        <Link
+          href="/catalog"
+          className="inline-flex items-center gap-2 rounded-full border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-medium text-[#111827] transition hover:bg-[#F7F8FA]"
+        >
+          <span>←</span>
+          <span>Назад в каталог</span>
         </Link>
-
-        <img
-          src={mainImageSrc}
-          alt={product.title}
-          className="w-full rounded-2xl border bg-white object-cover"
-        />
-
-        {product.images?.length > 1 && (
-          <div className="mt-4 grid grid-cols-4 gap-3">
-            {product.images.map((img) => (
-              <img
-                key={img.id}
-                src={`http://localhost:4000${img.url}`}
-                alt={product.title}
-                className="h-24 w-full rounded-xl border object-cover"
-              />
-            ))}
-          </div>
-        )}
       </div>
 
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">{product.title}</h1>
-
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <p className="text-3xl font-bold text-slate-900">{product.price} BYN</p>
-
-          <span
-            className={`inline-flex rounded-full px-3 py-1 text-sm font-medium ${
-              product.stock > 0
-                ? 'bg-emerald-50 text-emerald-700'
-                : 'bg-red-50 text-red-600'
-            }`}
-          >
-            {product.stock > 0 ? `В наличии: ${product.stock}` : 'Нет в наличии'}
-          </span>
-        </div>
-
-        <div className="mt-6 grid gap-4">
-          <div className="rounded-2xl border bg-white p-4">
-            <p className="text-sm text-slate-500">Продавец</p>
-            <p className="mt-1 text-lg font-semibold">{sellerName}</p>
-
-            {product.seller?.storeDescription && (
-              <p className="mt-2 text-sm text-slate-600">
-                {product.seller.storeDescription}
-              </p>
-            )}
-
-            {product.seller?.storeSlug && (
-              <Link
-                href={`/store/${product.seller.storeSlug}`}
-                className="mt-4 inline-flex rounded-xl bg-black px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
-              >
-                Перейти в магазин
-              </Link>
-            )}
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(420px,0.9fr)]">
+        <div className="space-y-4">
+          <div className="overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white">
+            <div className="relative aspect-square w-full bg-[#F7F8FA]">
+              <Image
+                src={mainImage}
+                alt={product.title}
+                fill
+                className="object-contain p-4"
+                sizes="(max-width: 1024px) 100vw, 55vw"
+                priority
+              />
+            </div>
           </div>
 
-          <div className="rounded-2xl border bg-white p-4">
-            <h2 className="font-semibold">Описание</h2>
-            <p className="mt-2 whitespace-pre-line text-slate-600">
+          {gallery.length > 1 && (
+            <div className="grid grid-cols-4 gap-3">
+              {gallery.map((img) => (
+                <div
+                  key={img.id}
+                  className="overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white"
+                >
+                  <div className="relative aspect-square w-full bg-[#F7F8FA]">
+                    <Image
+                      src={img.url}
+                      alt={product.title}
+                      fill
+                      className="object-contain p-2"
+                      sizes="25vw"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-5">
+          <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5 md:p-6">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              {product.category?.name && (
+                <span className="inline-flex rounded-full bg-[#FFF4DD] px-3 py-1 text-xs font-semibold text-[#1F2937]">
+                  {product.category.name}
+                </span>
+              )}
+
+              <span className="inline-flex rounded-full bg-[#F7F8FA] px-3 py-1 text-xs font-medium text-[#6B7280]">
+                SKU: {product.sku}
+              </span>
+            </div>
+
+            <h1 className="text-[28px] font-bold leading-[36px] text-[#111827] md:text-[32px] md:leading-[40px]">
+              {product.title}
+            </h1>
+
+            <div className="mt-5 flex flex-wrap items-end gap-3">
+              <p className="text-[32px] font-bold leading-none text-[#111827]">
+                {product.price} BYN
+              </p>
+
+              <span
+                className={`inline-flex rounded-full px-3 py-1 text-sm font-semibold ${
+                  inStock
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : 'bg-red-50 text-red-600'
+                }`}
+              >
+                {inStock ? `В наличии: ${product.stock}` : 'Нет в наличии'}
+              </span>
+            </div>
+
+            <div className="mt-6">
+              <AddToCartButton product={product} />
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5 md:p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-[#6B7280]">Продавец</p>
+                <p className="mt-1 text-lg font-semibold text-[#111827]">
+                  {sellerName}
+                </p>
+
+                {product.seller?.storeDescription && (
+                  <p className="mt-3 max-w-[60ch] text-sm leading-6 text-[#6B7280]">
+                    {product.seller.storeDescription}
+                  </p>
+                )}
+              </div>
+
+              {product.seller?.storeSlug && (
+                <Link
+                  href={`/store/${product.seller.storeSlug}`}
+                  className="inline-flex shrink-0 items-center justify-center rounded-xl border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-semibold text-[#111827] transition hover:bg-[#F7F8FA]"
+                >
+                  Перейти в магазин
+                </Link>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5 md:p-6">
+            <h2 className="text-lg font-semibold text-[#111827]">Описание</h2>
+            <p className="mt-3 whitespace-pre-line text-sm leading-6 text-[#6B7280] md:text-[14px]">
               {product.description || 'Описание отсутствует'}
             </p>
           </div>
 
-          <div className="rounded-2xl border bg-white p-4">
-            <h2 className="font-semibold">Характеристики</h2>
+          <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5 md:p-6">
+            <h2 className="text-lg font-semibold text-[#111827]">Характеристики</h2>
 
-            <div className="mt-3 grid gap-2 text-sm text-slate-700">
-              <p>
-                <strong>SKU:</strong> {product.sku}
-              </p>
+            <div className="mt-4 overflow-hidden rounded-2xl border border-[#E5E7EB]">
+              <div className="grid divide-y divide-[#E5E7EB]">
+                <div className="grid grid-cols-2 gap-4 bg-white px-4 py-3 text-sm">
+                  <span className="text-[#6B7280]">SKU</span>
+                  <span className="font-medium text-[#111827]">{product.sku}</span>
+                </div>
 
-              {product.category?.name && (
-                <p>
-                  <strong>Категория:</strong> {product.category.name}
-                </p>
-              )}
+                {product.category?.name && (
+                  <div className="grid grid-cols-2 gap-4 bg-white px-4 py-3 text-sm">
+                    <span className="text-[#6B7280]">Категория</span>
+                    <span className="font-medium text-[#111827]">
+                      {product.category.name}
+                    </span>
+                  </div>
+                )}
 
-              <p>
-                <strong>Остаток:</strong> {product.stock}
-              </p>
+                <div className="grid grid-cols-2 gap-4 bg-white px-4 py-3 text-sm">
+                  <span className="text-[#6B7280]">Остаток</span>
+                  <span className="font-medium text-[#111827]">{product.stock}</span>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-
-        <div className="mt-6">
-          <AddToCartButton product={product} />
         </div>
       </div>
     </section>
