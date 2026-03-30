@@ -12,12 +12,20 @@ type Store = {
 
 function normalizeImageSrc(src?: string | null) {
   if (!src) return null;
-  return src.startsWith('http') ? src : `http://localhost:4000${src}`;
+  const backendUrl =
+    process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, '') || 'http://localhost:4000';
+
+  return src.startsWith('http') ? src : `${backendUrl}${src}`;
 }
 
 async function getStores(): Promise<Store[]> {
-  const res = await api.get('/users/stores');
-  return res.data;
+  try {
+    const res = await api.get('/users/stores');
+    return Array.isArray(res.data) ? res.data : [];
+  } catch (error) {
+    console.error('Failed to load stores:', error);
+    return [];
+  }
 }
 
 export default async function StoresPage() {
