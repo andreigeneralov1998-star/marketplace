@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
 import {
   CalendarRange,
   CheckCircle2,
@@ -109,7 +108,7 @@ function formatOrderDate(value: string) {
 
 export default function AccountPage() {
   const { user, fetchMe } = useAuthStore();
-  const searchParams = useSearchParams();
+
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [dateFrom, setDateFrom] = useState('');
@@ -161,10 +160,13 @@ export default function AccountPage() {
   }, [fetchMe]);
 
   useEffect(() => {
-    if (searchParams.get('order') === 'success') {
+    if (typeof window === 'undefined') return;
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('order') === 'success') {
       toast.success('Заказ успешно оформлен');
     }
-  }, [searchParams]);
+  }, []);
 
   const handleApplyFilter = async () => {
     if (dateFrom && dateTo && new Date(dateFrom) > new Date(dateTo)) {
