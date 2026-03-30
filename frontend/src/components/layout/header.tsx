@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import {
   Search,
   ShoppingCart,
@@ -21,15 +21,22 @@ type CartItem = {
   quantity: number;
 };
 
+function isActive(pathname: string, href: string) {
+  if (href === '/') return pathname === '/';
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 export function Header() {
   const { user, fetchMe, logout } = useAuthStore();
   const router = useRouter();
+  const pathname = usePathname();
 
   const [search, setSearch] = useState('');
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
+
     if (token && !user) {
       fetchMe().catch(() => undefined);
     }
@@ -52,7 +59,7 @@ export function Header() {
       .catch(() => {
         setCartItems([]);
       });
-  }, [user]);
+  }, [user, pathname]);
 
   const cartCount = useMemo(() => {
     return cartItems.reduce((sum, item) => sum + (item.quantity ?? 0), 0);
@@ -83,16 +90,16 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-[#E5E7EB] bg-[rgba(247,248,250,0.92)] backdrop-blur-md">
       <div className="app-container">
-        <div className="flex min-h-[72px] items-center gap-4 py-3 lg:gap-6">
+        <div className="flex min-h-[72px] items-center gap-3 py-3 lg:gap-6">
           <Link
             href="/"
-            className="group flex shrink-0 items-center gap-3 rounded-xl transition"
+            className="group flex shrink-0 items-center gap-3 rounded-2xl transition"
           >
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white text-lg font-bold text-[#111827] shadow-[0_6px_18px_rgba(15,23,42,0.05)] transition group-hover:-translate-y-0.5">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white text-lg font-bold text-[#111827] shadow-[0_8px_24px_rgba(15,23,42,0.05)] transition duration-200 group-hover:-translate-y-0.5 group-hover:shadow-[0_14px_30px_rgba(15,23,42,0.08)]">
               R
             </div>
 
-            <div className="flex flex-col leading-none">
+            <div className="hidden flex-col leading-none sm:flex">
               <span className="text-[15px] font-semibold tracking-tight text-[#111827]">
                 Рынок Бай
               </span>
@@ -102,23 +109,32 @@ export function Header() {
             </div>
           </Link>
 
-          <nav className="hidden items-center gap-5 lg:flex">
+          <nav className="hidden items-center gap-2 lg:flex">
             <Link
               href="/catalog"
-              className="text-sm font-medium text-[#6B7280] transition hover:text-[#111827]"
+              className={`inline-flex h-10 items-center rounded-full px-4 text-sm font-medium transition ${
+                isActive(pathname, '/catalog')
+                  ? 'bg-[#FFF4DD] text-[#111827]'
+                  : 'text-[#6B7280] hover:bg-white hover:text-[#111827]'
+              }`}
             >
               Каталог
             </Link>
+
             <Link
               href="/stores"
-              className="text-sm font-medium text-[#6B7280] transition hover:text-[#111827]"
+              className={`inline-flex h-10 items-center rounded-full px-4 text-sm font-medium transition ${
+                isActive(pathname, '/stores') || isActive(pathname, '/store')
+                  ? 'bg-[#FFF4DD] text-[#111827]'
+                  : 'text-[#6B7280] hover:bg-white hover:text-[#111827]'
+              }`}
             >
               Магазины
             </Link>
           </nav>
 
           <form onSubmit={handleSearch} className="hidden flex-1 md:flex">
-            <div className="flex h-12 w-full items-center gap-3 rounded-xl border border-[#E5E7EB] bg-white px-4 shadow-[0_4px_14px_rgba(15,23,42,0.04)] transition focus-within:border-[#F5A623] focus-within:shadow-[0_0_0_4px_rgba(245,166,35,0.14)]">
+            <div className="flex h-12 w-full items-center gap-3 rounded-xl border border-[#E5E7EB] bg-white px-4 shadow-[0_6px_18px_rgba(15,23,42,0.04)] transition focus-within:border-[#F5A623] focus-within:shadow-[0_0_0_4px_rgba(245,166,35,0.14)]">
               <Search className="h-4 w-4 shrink-0 text-[#6B7280]" />
               <input
                 type="text"
@@ -133,7 +149,7 @@ export function Header() {
           <div className="ml-auto flex items-center gap-2 md:gap-3">
             <Link
               href="/cart"
-              className="relative inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm font-semibold text-[#111827] shadow-[0_6px_18px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(15,23,42,0.08)]"
+              className="relative inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm font-semibold text-[#111827] shadow-[0_8px_24px_rgba(15,23,42,0.05)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_30px_rgba(15,23,42,0.08)]"
             >
               <ShoppingCart className="h-4 w-4" />
               <span className="hidden sm:inline">Корзина</span>
@@ -149,7 +165,7 @@ export function Header() {
               <>
                 <Link
                   href="/account"
-                  className="hidden h-11 items-center gap-2 rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm font-medium text-[#111827] shadow-[0_6px_18px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(15,23,42,0.08)] md:inline-flex"
+                  className="hidden h-11 items-center gap-2 rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm font-medium text-[#111827] shadow-[0_8px_24px_rgba(15,23,42,0.05)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_30px_rgba(15,23,42,0.08)] md:inline-flex"
                 >
                   <User className="h-4 w-4 text-[#6B7280]" />
                   Кабинет
@@ -178,7 +194,7 @@ export function Header() {
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm font-medium text-[#111827] shadow-[0_6px_18px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(15,23,42,0.08)]"
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm font-medium text-[#111827] shadow-[0_8px_24px_rgba(15,23,42,0.05)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_30px_rgba(15,23,42,0.08)]"
                 >
                   <LogOut className="h-4 w-4 text-[#6B7280]" />
                   <span className="hidden md:inline">Выйти</span>
@@ -188,7 +204,7 @@ export function Header() {
               <>
                 <Link
                   href="/login"
-                  className="hidden h-11 items-center rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm font-medium text-[#111827] shadow-[0_6px_18px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(15,23,42,0.08)] md:inline-flex"
+                  className="hidden h-11 items-center rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm font-medium text-[#111827] shadow-[0_8px_24px_rgba(15,23,42,0.05)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_30px_rgba(15,23,42,0.08)] md:inline-flex"
                 >
                   Вход
                 </Link>
@@ -206,7 +222,7 @@ export function Header() {
 
         <div className="flex pb-4 md:hidden">
           <form onSubmit={handleSearch} className="w-full">
-            <div className="flex h-11 w-full items-center gap-3 rounded-xl border border-[#E5E7EB] bg-white px-4 shadow-[0_4px_14px_rgba(15,23,42,0.04)] transition focus-within:border-[#F5A623] focus-within:shadow-[0_0_0_4px_rgba(245,166,35,0.14)]">
+            <div className="flex h-11 w-full items-center gap-3 rounded-xl border border-[#E5E7EB] bg-white px-4 shadow-[0_6px_18px_rgba(15,23,42,0.04)] transition focus-within:border-[#F5A623] focus-within:shadow-[0_0_0_4px_rgba(245,166,35,0.14)]">
               <Search className="h-4 w-4 shrink-0 text-[#6B7280]" />
               <input
                 type="text"
@@ -219,34 +235,56 @@ export function Header() {
           </form>
         </div>
 
-        {user && (
-          <div className="flex flex-wrap items-center gap-2 pb-4 lg:hidden">
+        <div className="flex gap-2 overflow-x-auto pb-4 lg:hidden">
+          <Link
+            href="/catalog"
+            className={`inline-flex h-10 shrink-0 items-center rounded-full px-4 text-sm font-medium transition ${
+              isActive(pathname, '/catalog')
+                ? 'bg-[#FFF4DD] text-[#111827]'
+                : 'border border-[#E5E7EB] bg-white text-[#111827]'
+            }`}
+          >
+            Каталог
+          </Link>
+
+          <Link
+            href="/stores"
+            className={`inline-flex h-10 shrink-0 items-center rounded-full px-4 text-sm font-medium transition ${
+              isActive(pathname, '/stores') || isActive(pathname, '/store')
+                ? 'bg-[#FFF4DD] text-[#111827]'
+                : 'border border-[#E5E7EB] bg-white text-[#111827]'
+            }`}
+          >
+            Магазины
+          </Link>
+
+          {user && (
             <Link
               href="/account"
-              className="inline-flex h-10 items-center rounded-full border border-[#E5E7EB] bg-white px-3 text-sm font-medium text-[#111827]"
+              className="inline-flex h-10 shrink-0 items-center rounded-full border border-[#E5E7EB] bg-white px-4 text-sm font-medium text-[#111827]"
             >
               Кабинет
             </Link>
+          )}
 
-            {user.role === 'SELLER' && (
-              <Link
-                href="/seller"
-                className="inline-flex h-10 items-center rounded-full bg-[#FFF4DD] px-3 text-sm font-semibold text-[#1F2937]"
-              >
-                Seller
-              </Link>
-            )}
+          {user?.role === 'SELLER' && (
+            <Link
+              href="/seller"
+              className="inline-flex h-10 shrink-0 items-center rounded-full bg-[#FFF4DD] px-4 text-sm font-semibold text-[#1F2937]"
+            >
+              Seller
+            </Link>
+          )}
 
-            {user.role === 'ADMIN' && (
-              <Link
-                href="/admin"
-                className="inline-flex h-10 items-center rounded-full bg-[#111827] px-3 text-sm font-semibold text-white"
-              >
-                Admin
-              </Link>
-            )}
-          </div>
-        )}
+          {user?.role === 'ADMIN' && (
+            <Link
+              href="/admin"
+              className="inline-flex h-10 shrink-0 items-center rounded-full bg-[#111827] px-4 text-sm font-semibold text-white"
+            >
+              Admin
+            </Link>
+          )}
+        </div>
 
         <div className="hidden items-center gap-2 border-t border-[#E5E7EB] py-3 lg:flex">
           <Link

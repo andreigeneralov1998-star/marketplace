@@ -1,9 +1,17 @@
 'use client';
 
+import Image from 'next/image';
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { ArrowRight, CheckCircle2, MapPin, Package, Truck } from 'lucide-react';
+import toast from 'react-hot-toast';
+
 import { api } from '@/lib/api';
-import { Truck, MapPin, Package, CreditCard, User, Phone } from 'lucide-react';
+import { formatPrice } from '@/lib/utils';
+import { PageTitle } from '@/components/ui/page-title';
+
+type DeliveryMethod = 'EMS' | 'EUROPOST' | 'BELPOST' | 'PICKUP';
 
 type CartItem = {
   id: string;
@@ -11,89 +19,89 @@ type CartItem = {
   product: {
     id: string;
     title: string;
-    price: number;
-    images?: { url: string }[];
+    slug: string;
+    price: string | number;
+    imageUrl?: string | null;
+    images?: { id?: string; url: string }[];
   };
 };
 
-type CartResponse = {
+type CartState = {
   items: CartItem[];
   total: number;
 };
 
-type DeliveryMethod = 'EMS' | 'EUROPOCHTA' | 'BELPOCHTA' | 'PICKUP_TOPSET';
+type CheckoutFormState = {
+  fullName: string;
+  phone: string;
+  city: string;
+  street: string;
+  house: string;
+  fullAddress: string;
+  comment: string;
+  deliveryMethod: DeliveryMethod;
+};
 
 const DELIVERY_OPTIONS: {
   value: DeliveryMethod;
-  label: string;
+  title: string;
   description: string;
+  icon: typeof Truck;
 }[] = [
   {
     value: 'EMS',
-    label: 'EMS почта',
-    description: 'Быстрая доставка курьерской службой',
+    title: 'EMS',
+    description: 'Быстрая доставка по адресу получателя.',
+    icon: Truck,
   },
   {
-    value: 'EUROPOCHTA',
-    label: 'Европочта',
-    description: 'Доставка через отделение Европочты',
+    value: 'EUROPOST',
+    title: 'Европочта',
+    description: 'Получение через отделение Европочты.',
+    icon: Package,
   },
   {
-    value: 'BELPOCHTA',
-    label: 'Белпочта',
-    description: 'Классическая доставка через Белпочту',
+    value: 'BELPOST',
+    title: 'Белпочта',
+    description: 'Доставка через отделение Белпочты.',
+    icon: Package,
   },
   {
-    value: 'PICKUP_TOPSET',
-    label: 'Самовывоз TOPSET',
-    description: 'Забрать заказ самостоятельно',
+    value: 'PICKUP',
+    title: 'Самовывоз с магазина TOPSET',
+    description: 'Получение заказа в TOPSET.',
+    icon: MapPin,
   },
 ];
 
-function formatPrice(value: number) {
-  return new Intl.NumberFormat('ru-RU', {
-    style: 'currency',
-    currency: 'BYN',
-    maximumFractionDigits: 2,
-  }).format(value);
+function normalizeImageSrc(src?: string | null) {
+  if (!src) return '/uploads/placeholders/no-photo.png';
+  return src.startsWith('http') ? src : `http://localhost:4000${src}`;
 }
 
 export default function CheckoutPage() {
   const router = useRouter();
 
-  const [cart, setCart] = useState<CartResponse>({ items: [], total: 0 });
+  const [cart, setCart] = useState<CartState>({
+    items: [],
+    total: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<CheckoutFormState>({
     fullName: '',
     phone: '',
     city: '',
     street: '',
     house: '',
-    apartment: '',
     fullAddress: '',
     comment: '',
-    deliveryMethod: 'BELPOCHTA' as DeliveryMethod,
+    deliveryMethod: 'EMS',
   });
 
-  const isPickup = form.deliveryMethod === 'PICKUP_TOPSET';
-
-  const finalAddress = useMemo(() => {
-    if (isPickup) {
-      return 'Самовывоз TOPSET';
-    }
-
-    const parts = [
-      form.city.trim(),
-      form.street.trim(),
-      form.house.trim() ? `дом ${form.house.trim()}` : '',
-      form.fullAddress.trim(),
-    ].filter(Boolean);
-
-    return parts.join(', ');
-  }, [form.city, form.street, form.house, form.fullAddress, isPickup]);
+  const isPickup = form.deliveryMethod === 'PICKUP';
 
   useEffect(() => {
     const loadCart = async () => {
@@ -107,8 +115,8 @@ export default function CheckoutPage() {
         const items = Array.isArray(data)
           ? data
           : Array.isArray(data?.items)
-          ? data.items
-          : [];
+            ? data.items
+            : [];
 
         const total =
           typeof data?.total === 'number'
@@ -125,7 +133,7 @@ export default function CheckoutPage() {
         console.error('LOAD CART ERROR:', err?.response?.status, err?.response?.data);
 
         if (err?.response?.status === 401) {
-          setError('Сначала войдите в аккаунт');
+          router.push('/login?redirect=/checkout');
           return;
         }
 
@@ -134,12 +142,6 @@ export default function CheckoutPage() {
         setLoading(false);
       }
     };
-    const token = localStorage.getItem('accessToken');
-
-      if (!token) {
-        router.push('/login');
-        return;
-      }
 
     loadCart();
   }, [router]);
@@ -163,7 +165,9 @@ export default function CheckoutPage() {
       if (!form.city.trim()) return 'Введите город';
       if (!form.street.trim()) return 'Введите улицу';
       if (!form.house.trim()) return 'Введите дом';
-      if (!form.fullAddress.trim()) return 'Введите квартиру, подъезд, этаж или другие детали адреса';
+      if (!form.fullAddress.trim()) {
+        return 'Введите квартиру, подъезд, этаж или другие детали адреса';
+      }
     }
 
     if (!cart.items.length) return 'Корзина пустая';
@@ -177,6 +181,7 @@ export default function CheckoutPage() {
     const validationError = validateForm();
     if (validationError) {
       setError(validationError);
+      toast.error(validationError);
       return;
     }
 
@@ -195,32 +200,53 @@ export default function CheckoutPage() {
         deliveryMethod: form.deliveryMethod,
       });
 
+      toast.success('Заказ успешно оформлен');
       router.push('/account?order=success');
     } catch (err: any) {
-      setError(
-        err?.response?.data?.message || 'Не удалось оформить заказ. Попробуйте снова.'
-      );
+      const message =
+        typeof err?.response?.data?.message === 'string'
+          ? err.response.data.message
+          : Array.isArray(err?.response?.data?.message)
+            ? err.response.data.message.join(', ')
+            : 'Не удалось оформить заказ. Попробуйте снова.';
+
+      setError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
   };
 
+  const totalQuantity = useMemo(() => {
+    return cart.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+  }, [cart.items]);
+
   if (loading) {
     return (
-      <section className="mx-auto max-w-7xl px-4 py-10">
-        <div className="animate-pulse space-y-6">
-          <div className="h-10 w-64 rounded-xl bg-slate-200" />
-          <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
-            <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-              <div className="space-y-4">
-                <div className="h-14 rounded-2xl bg-slate-100" />
-                <div className="h-14 rounded-2xl bg-slate-100" />
-                <div className="h-14 rounded-2xl bg-slate-100" />
-                <div className="h-14 rounded-2xl bg-slate-100" />
-              </div>
+      <section className="grid gap-6 md:gap-8">
+        <div className="rounded-[20px] border border-[#E5E7EB] bg-white p-6 md:p-8">
+          <div className="animate-pulse space-y-4">
+            <div className="h-9 w-64 rounded-xl bg-[#EEF0F3]" />
+            <div className="h-5 w-96 max-w-full rounded-xl bg-[#F3F4F6]" />
+          </div>
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+          <div className="rounded-[20px] border border-[#E5E7EB] bg-white p-6">
+            <div className="animate-pulse space-y-4">
+              <div className="h-14 rounded-2xl bg-[#F3F4F6]" />
+              <div className="h-14 rounded-2xl bg-[#F3F4F6]" />
+              <div className="h-14 rounded-2xl bg-[#F3F4F6]" />
+              <div className="h-28 rounded-2xl bg-[#F3F4F6]" />
             </div>
-            <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-              <div className="h-24 rounded-2xl bg-slate-100" />
+          </div>
+
+          <div className="rounded-[20px] border border-[#E5E7EB] bg-white p-6">
+            <div className="animate-pulse space-y-4">
+              <div className="h-7 w-40 rounded-xl bg-[#EEF0F3]" />
+              <div className="h-20 rounded-2xl bg-[#F3F4F6]" />
+              <div className="h-20 rounded-2xl bg-[#F3F4F6]" />
+              <div className="h-12 rounded-xl bg-[#F3F4F6]" />
             </div>
           </div>
         </div>
@@ -228,297 +254,367 @@ export default function CheckoutPage() {
     );
   }
 
-  return (
-    <section className="min-h-screen bg-slate-50 py-10">
-      <div className="mx-auto max-w-7xl px-4">
-        <div className="mb-8">
-          <p className="text-sm font-medium uppercase tracking-[0.2em] text-yellow-600">
-            TOPSET
-          </p>
-          <h1 className="mt-2 text-4xl font-bold tracking-tight text-slate-900">
-            Оформление заказа
-          </h1>
-          <p className="mt-2 text-slate-600">
-            Заполните данные для доставки и проверьте состав заказа перед подтверждением.
-          </p>
+  if (!cart.items.length) {
+    return (
+      <section className="grid gap-6 md:gap-8">
+        <div className="rounded-[20px] border border-[#E5E7EB] bg-white p-6 md:p-8">
+          <PageTitle
+            title="Оформление заказа"
+            description="Проверьте состав корзины и заполните данные получателя перед подтверждением."
+            meta={
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <span className="inline-flex rounded-full bg-[#FFF4DD] px-3 py-1 text-xs font-semibold text-[#1F2937]">
+                  Marketplace
+                </span>
+                <span className="inline-flex rounded-full bg-[#F7F8FA] px-3 py-1 text-xs font-medium text-[#6B7280]">
+                  Корзина пуста
+                </span>
+              </div>
+            }
+          />
         </div>
 
-        <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
-          <form
-            onSubmit={handleSubmit}
-            className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200"
-          >
-            <div className="space-y-8">
+        <div className="rounded-[24px] border border-dashed border-[#E5E7EB] bg-white px-6 py-14 text-center md:px-10">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#FFF4DD]">
+            <Package className="h-7 w-7 text-[#1F2937]" />
+          </div>
+
+          <h2 className="mt-5 text-2xl font-bold tracking-tight text-[#111827]">
+            Нечего оформлять
+          </h2>
+
+          <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-[#6B7280] md:text-[15px]">
+            В вашей корзине пока нет товаров. Сначала добавьте нужные позиции, а затем
+            возвращайтесь к оформлению.
+          </p>
+
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            <Link
+              href="/catalog"
+              className="inline-flex h-12 items-center justify-center rounded-xl bg-[#F5A623] px-6 text-sm font-semibold text-[#111827] transition hover:bg-[#E69512]"
+            >
+              Перейти в каталог
+            </Link>
+
+            <Link
+              href="/cart"
+              className="inline-flex h-12 items-center justify-center rounded-xl border border-[#E5E7EB] bg-white px-6 text-sm font-semibold text-[#111827] transition hover:bg-[#F7F8FA]"
+            >
+              Вернуться в корзину
+            </Link>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="grid gap-6 md:gap-8">
+      <div className="rounded-[20px] border border-[#E5E7EB] bg-white p-6 md:p-8">
+        <PageTitle
+          title="Оформление заказа"
+          description="Укажите данные получателя, выберите способ доставки и проверьте итоговую сумму перед подтверждением."
+          meta={
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <span className="inline-flex rounded-full bg-[#FFF4DD] px-3 py-1 text-xs font-semibold text-[#1F2937]">
+                Marketplace
+              </span>
+              <span className="inline-flex rounded-full bg-[#F7F8FA] px-3 py-1 text-xs font-medium text-[#6B7280]">
+                Позиций: {cart.items.length}
+              </span>
+              <span className="inline-flex rounded-full bg-[#F7F8FA] px-3 py-1 text-xs font-medium text-[#6B7280]">
+                Товаров: {totalQuantity}
+              </span>
+              <span className="inline-flex rounded-full bg-[#F7F8FA] px-3 py-1 text-xs font-medium text-[#6B7280]">
+                Сумма: {formatPrice(cart.total)}
+              </span>
+            </div>
+          }
+        />
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <form
+          onSubmit={handleSubmit}
+          className="rounded-[20px] border border-[#E5E7EB] bg-white p-5 md:p-6"
+        >
+          <div className="space-y-8">
+            <div>
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#FFF4DD]">
+                  <CheckCircle2 className="h-5 w-5 text-[#1F2937]" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-[#111827]">Данные получателя</h2>
+                  <p className="text-sm text-[#6B7280]">
+                    Эти данные нужны для связи и передачи заказа.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="block">
+                  <span className="mb-2 block text-[13px] font-semibold text-[#111827]">
+                    ФИО
+                  </span>
+                  <input
+                    name="fullName"
+                    value={form.fullName}
+                    onChange={handleChange}
+                    placeholder="Введите полное имя"
+                    className="h-11 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm text-[#111827] outline-none transition focus:border-[#F5A623] focus:shadow-[0_0_0_4px_rgba(245,166,35,0.14)]"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-2 block text-[13px] font-semibold text-[#111827]">
+                    Телефон
+                  </span>
+                  <input
+                    name="phone"
+                    value={form.phone}
+                    onChange={handleChange}
+                    placeholder="+375..."
+                    className="h-11 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm text-[#111827] outline-none transition focus:border-[#F5A623] focus:shadow-[0_0_0_4px_rgba(245,166,35,0.14)]"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#FFF4DD]">
+                  <Truck className="h-5 w-5 text-[#1F2937]" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-[#111827]">Способ доставки</h2>
+                  <p className="text-sm text-[#6B7280]">
+                    Выберите удобный вариант получения заказа.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                {DELIVERY_OPTIONS.map((option) => {
+                  const Icon = option.icon;
+                  const active = form.deliveryMethod === option.value;
+
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => handleDeliveryChange(option.value)}
+                      className={`rounded-2xl border p-4 text-left transition ${
+                        active
+                          ? 'border-[#F5A623] bg-[#FFF4DD]'
+                          : 'border-[#E5E7EB] bg-[#FCFCFD] hover:bg-white'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={`flex h-10 w-10 items-center justify-center rounded-2xl ${
+                            active ? 'bg-white' : 'bg-[#F7F8FA]'
+                          }`}
+                        >
+                          <Icon className="h-5 w-5 text-[#1F2937]" />
+                        </div>
+
+                        <div>
+                          <div className="text-sm font-semibold text-[#111827]">
+                            {option.title}
+                          </div>
+                          <p className="mt-1 text-sm leading-5 text-[#6B7280]">
+                            {option.description}
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {!isPickup && (
               <div>
-                <div className="mb-4 flex items-center gap-2">
-                  <User className="h-5 w-5 text-yellow-600" />
-                  <h2 className="text-xl font-semibold text-slate-900">
-                    Контактные данные
-                  </h2>
+                <div className="mb-4 flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#FFF4DD]">
+                    <MapPin className="h-5 w-5 text-[#1F2937]" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-[#111827]">Адрес доставки</h2>
+                    <p className="text-sm text-[#6B7280]">
+                      Укажите точный адрес, чтобы заказ был доставлен без задержек.
+                    </p>
+                  </div>
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
-                  <div className="md:col-span-2">
-                    <label className="mb-2 block text-sm font-medium text-slate-700">
-                      ФИО
-                    </label>
+                  <label className="block">
+                    <span className="mb-2 block text-[13px] font-semibold text-[#111827]">
+                      Город
+                    </span>
                     <input
-                      name="fullName"
-                      value={form.fullName}
+                      name="city"
+                      value={form.city}
                       onChange={handleChange}
-                      placeholder="Введите ФИО"
-                      className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none transition focus:border-yellow-500 focus:ring-4 focus:ring-yellow-100"
+                      placeholder="Например, Минск"
+                      className="h-11 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm text-[#111827] outline-none transition focus:border-[#F5A623] focus:shadow-[0_0_0_4px_rgba(245,166,35,0.14)]"
                     />
-                  </div>
+                  </label>
 
-                  <div className="md:col-span-2">
-                    <label className="mb-2 block text-sm font-medium text-slate-700">
-                      Номер телефона
-                    </label>
-                    <div className="relative">
-                      <Phone className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-                      <input
-                        name="phone"
-                        value={form.phone}
-                        onChange={handleChange}
-                        placeholder="+375 (29) 123-45-67"
-                        className="w-full rounded-2xl border border-slate-300 py-3 pl-12 pr-4 outline-none transition focus:border-yellow-500 focus:ring-4 focus:ring-yellow-100"
-                      />
-                    </div>
-                  </div>
+                  <label className="block">
+                    <span className="mb-2 block text-[13px] font-semibold text-[#111827]">
+                      Улица
+                    </span>
+                    <input
+                      name="street"
+                      value={form.street}
+                      onChange={handleChange}
+                      placeholder="Улица"
+                      className="h-11 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm text-[#111827] outline-none transition focus:border-[#F5A623] focus:shadow-[0_0_0_4px_rgba(245,166,35,0.14)]"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-2 block text-[13px] font-semibold text-[#111827]">
+                      Дом
+                    </span>
+                    <input
+                      name="house"
+                      value={form.house}
+                      onChange={handleChange}
+                      placeholder="Дом"
+                      className="h-11 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm text-[#111827] outline-none transition focus:border-[#F5A623] focus:shadow-[0_0_0_4px_rgba(245,166,35,0.14)]"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-2 block text-[13px] font-semibold text-[#111827]">
+                      Квартира / подъезд / этаж
+                    </span>
+                    <input
+                      name="fullAddress"
+                      value={form.fullAddress}
+                      onChange={handleChange}
+                      placeholder="Дополнительные детали адреса"
+                      className="h-11 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm text-[#111827] outline-none transition focus:border-[#F5A623] focus:shadow-[0_0_0_4px_rgba(245,166,35,0.14)]"
+                    />
+                  </label>
                 </div>
               </div>
+            )}
 
-              <div>
-                <div className="mb-4 flex items-center gap-2">
-                  <Truck className="h-5 w-5 text-yellow-600" />
-                  <h2 className="text-xl font-semibold text-slate-900">
-                    Способ доставки
-                  </h2>
-                </div>
-
-                <div className="grid gap-3">
-                  {DELIVERY_OPTIONS.map((option) => {
-                    const active = form.deliveryMethod === option.value;
-
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => handleDeliveryChange(option.value)}
-                        className={`rounded-2xl border p-4 text-left transition ${
-                          active
-                            ? 'border-yellow-500 bg-yellow-50 ring-2 ring-yellow-200'
-                            : 'border-slate-200 bg-white hover:border-slate-300'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div>
-                            <div className="font-semibold text-slate-900">
-                              {option.label}
-                            </div>
-                            <div className="mt-1 text-sm text-slate-600">
-                              {option.description}
-                            </div>
-                          </div>
-
-                          <div
-                            className={`mt-1 h-5 w-5 rounded-full border-2 ${
-                              active
-                                ? 'border-yellow-500 bg-yellow-500'
-                                : 'border-slate-300'
-                            }`}
-                          />
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {!isPickup && (
-                <div>
-                  <div className="mb-4 flex items-center gap-2">
-                    <MapPin className="h-5 w-5 text-yellow-600" />
-                    <h2 className="text-xl font-semibold text-slate-900">
-                      Адрес доставки
-                    </h2>
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-700">
-                        Город
-                      </label>
-                      <input
-                        name="city"
-                        value={form.city}
-                        onChange={handleChange}
-                        placeholder="Например, Минск"
-                        className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none transition focus:border-yellow-500 focus:ring-4 focus:ring-yellow-100"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-700">
-                        Улица
-                      </label>
-                      <input
-                        name="street"
-                        value={form.street}
-                        onChange={handleChange}
-                        placeholder="Например, Притыцкого"
-                        className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none transition focus:border-yellow-500 focus:ring-4 focus:ring-yellow-100"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-700">
-                        Дом
-                      </label>
-                      <input
-                        name="house"
-                        value={form.house}
-                        onChange={handleChange}
-                        placeholder="Например, 10"
-                        className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none transition focus:border-yellow-500 focus:ring-4 focus:ring-yellow-100"
-                      />
-                    </div>
-
-                    <div className="md:col-span-2">
-                      <label className="mb-2 block text-sm font-medium text-slate-700">
-                        Квартира, подъезд, этаж и другие детали
-                      </label>
-                      <textarea
-                        name="fullAddress"
-                        value={form.fullAddress}
-                        onChange={handleChange}
-                        placeholder="Квартира, подъезд, этаж, индекс, отделение и другие детали"
-                        rows={4}
-                        className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none transition focus:border-yellow-500 focus:ring-4 focus:ring-yellow-100"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
+            <div>
+              <label className="block">
+                <span className="mb-2 block text-[13px] font-semibold text-[#111827]">
                   Комментарий к заказу
-                </label>
+                </span>
                 <textarea
                   name="comment"
                   value={form.comment}
                   onChange={handleChange}
-                  placeholder="Например: позвонить перед доставкой"
-                  rows={4}
-                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none transition focus:border-yellow-500 focus:ring-4 focus:ring-yellow-100"
+                  rows={5}
+                  placeholder="Например, позвонить перед доставкой или уточнить удобное время"
+                  className="min-h-[120px] w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm text-[#111827] outline-none transition focus:border-[#F5A623] focus:shadow-[0_0_0_4px_rgba(245,166,35,0.14)]"
                 />
-              </div>
+              </label>
+            </div>
 
-              {error && (
-                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                  {error}
-                </div>
-              )}
+            {error && (
+              <div className="rounded-2xl border border-[#F3D0D0] bg-[#FEF3F2] px-4 py-3 text-sm font-medium text-[#B42318]">
+                {error}
+              </div>
+            )}
+
+            <div className="flex flex-col gap-3 border-t border-[#E5E7EB] pt-6 sm:flex-row sm:items-center sm:justify-between">
+              <Link
+                href="/cart"
+                className="inline-flex h-12 items-center justify-center rounded-xl border border-[#E5E7EB] bg-white px-6 text-sm font-semibold text-[#111827] transition hover:bg-[#F7F8FA]"
+              >
+                Вернуться в корзину
+              </Link>
 
               <button
                 type="submit"
-                disabled={submitting || cart.items.length === 0}
-                className="inline-flex w-full items-center justify-center rounded-2xl bg-slate-900 px-6 py-4 text-base font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={submitting}
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#F5A623] px-6 text-sm font-semibold text-[#111827] transition hover:bg-[#E69512] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {submitting ? 'Оформляем заказ...' : 'Подтвердить заказ'}
+                {submitting ? 'Оформление...' : 'Подтвердить заказ'}
+                {!submitting && <ArrowRight className="h-4 w-4" />}
               </button>
             </div>
-          </form>
+          </div>
+        </form>
 
-          <aside className="h-fit rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-            <div className="mb-4 flex items-center gap-2">
-              <Package className="h-5 w-5 text-yellow-600" />
-              <h2 className="text-xl font-semibold text-slate-900">Ваш заказ</h2>
+        <aside className="h-fit rounded-[20px] border border-[#E5E7EB] bg-white p-6">
+          <h2 className="text-lg font-semibold text-[#111827]">Ваш заказ</h2>
+
+          <div className="mt-5 space-y-3">
+            {cart.items.map((item) => {
+              const imageSrc = normalizeImageSrc(
+                item.product.images?.[0]?.url || item.product.imageUrl
+              );
+
+              return (
+                <div
+                  key={item.id}
+                  className="flex items-center gap-3 rounded-2xl border border-[#E5E7EB] bg-[#FCFCFD] p-3"
+                >
+                  <div className="relative h-16 w-16 overflow-hidden rounded-xl border border-[#E5E7EB] bg-[#F7F8FA]">
+                    <Image
+                      src={imageSrc}
+                      alt={item.product.title}
+                      fill
+                      className="object-contain p-2"
+                      sizes="64px"
+                    />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <Link
+                      href={`/product/${item.product.slug}`}
+                      className="line-clamp-2 text-sm font-semibold leading-5 text-[#111827]"
+                    >
+                      {item.product.title}
+                    </Link>
+                    <p className="mt-1 text-xs text-[#6B7280]">
+                      {item.quantity} × {formatPrice(Number(item.product.price))}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-5 space-y-3 border-t border-[#E5E7EB] pt-5">
+            <div className="flex items-center justify-between gap-4 text-sm">
+              <span className="text-[#6B7280]">Позиций</span>
+              <span className="font-semibold text-[#111827]">{cart.items.length}</span>
             </div>
 
-            {cart.items.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-8 text-center text-slate-500">
-                Корзина пустая
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {cart.items.map((item) => {
-                  const lineTotal = Number(item.product.price) * Number(item.quantity);
+            <div className="flex items-center justify-between gap-4 text-sm">
+              <span className="text-[#6B7280]">Количество товаров</span>
+              <span className="font-semibold text-[#111827]">{totalQuantity}</span>
+            </div>
 
-                  return (
-                    <div
-                      key={item.id}
-                      className="flex gap-4 rounded-2xl border border-slate-200 p-4"
-                    >
-                      <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-slate-100">
-                        {item.product.images?.[0]?.url ? (
-                          <img
-                            src={`http://localhost:4000${item.product.images[0].url}`}
-                            alt={item.product.title}
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-xs text-slate-400">
-                            Нет фото
-                          </div>
-                        )}
-                      </div>
+            <div className="h-px bg-[#E5E7EB]" />
 
-                      <div className="min-w-0 flex-1">
-                        <div className="line-clamp-2 font-semibold text-slate-900">
-                          {item.product.title}
-                        </div>
-                        <div className="mt-1 text-sm text-slate-500">
-                          Кол-во: {item.quantity}
-                        </div>
-                        <div className="mt-2 text-sm font-medium text-slate-700">
-                          {formatPrice(item.product.price)} × {item.quantity}
-                        </div>
-                      </div>
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-sm font-medium text-[#111827]">Итоговая сумма</span>
+              <span className="text-2xl font-bold leading-none text-[#111827]">
+                {formatPrice(cart.total)}
+              </span>
+            </div>
+          </div>
 
-                      <div className="whitespace-nowrap text-right font-semibold text-slate-900">
-                        {formatPrice(lineTotal)}
-                      </div>
-                    </div>
-                  );
-                })}
-
-                <div className="my-4 h-px bg-slate-200" />
-
-                <div className="space-y-3 rounded-2xl bg-slate-50 p-4">
-                  <div className="flex items-center justify-between text-sm text-slate-600">
-                    <span>Способ доставки</span>
-                    <span>
-                      {
-                        DELIVERY_OPTIONS.find(
-                          (option) => option.value === form.deliveryMethod
-                        )?.label
-                      }
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-lg font-bold text-slate-900">
-                    <span>Итого</span>
-                    <span>{formatPrice(cart.total)}</span>
-                  </div>
-                </div>
-
-                <div className="mt-4 rounded-2xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-slate-700">
-                  <div className="mb-1 flex items-center gap-2 font-semibold text-slate-900">
-                    <CreditCard className="h-4 w-4 text-yellow-600" />
-                    Проверка перед заказом
-                  </div>
-                  <p>
-                    Проверьте состав корзины, адрес и номер телефона. Ошибка в одном поле —
-                    и посылка уедет в параллельную вселенную.
-                  </p>
-                </div>
-              </div>
-            )}
-          </aside>
-        </div>
+          <div className="mt-5 rounded-2xl bg-[#F7F8FA] p-4">
+            <p className="text-sm font-medium text-[#111827]">Что будет дальше</p>
+            <p className="mt-2 text-sm leading-6 text-[#6B7280]">
+              После подтверждения заказа он появится в личном кабинете, где можно будет
+              отслеживать его статус.
+            </p>
+          </div>
+        </aside>
       </div>
     </section>
   );
