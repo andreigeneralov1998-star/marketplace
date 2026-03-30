@@ -1,8 +1,8 @@
 import Link from 'next/link';
-import type { Product } from '@/types';
+import type { ProductListItem } from '@/types';
 import { formatPrice } from '@/lib/utils';
 
-export function ProductCard({ product }: { product: Product }) {
+export function ProductCard({ product }: { product: ProductListItem }) {
   const image = product.images?.[0]?.url;
 
   return (
