@@ -6,3 +6,5 @@ build
 coverage
 *.log
 uploads
+frontend/.env.local
+backend/prisma/prisma/dev.db
