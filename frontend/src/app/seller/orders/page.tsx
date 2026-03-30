@@ -135,6 +135,7 @@ export default function SellerOrdersPage() {
       SHIPPED: orders.filter((o) => o.status === 'SHIPPED').length,
       DELIVERED: orders.filter((o) => o.status === 'DELIVERED').length,
       CANCELLED: orders.filter((o) => o.status === 'CANCELLED').length,
+      OUT_OF_STOCK: orders.filter((order) => order.status === 'OUT_OF_STOCK').length,
     };
   }, [orders]);
 
