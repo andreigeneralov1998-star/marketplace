@@ -5,6 +5,6 @@ build
 .next
 coverage
 *.log
-uploads
+/backend/uploads
 frontend/.env.local
 backend/prisma/prisma/dev.db
