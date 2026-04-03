@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { parse } from 'csv-parse/sync';
+import * as ExcelJS from 'exceljs';
 import slugify from 'slugify';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -17,6 +17,74 @@ const NO_PHOTO_URL = '/uploads/placeholders/no-photo.png';
 @Injectable()
 export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
+    private buildProductsWhere(
+      query: QueryProductsDto,
+      options?: { ignoreCategory?: boolean },
+    ): Prisma.ProductWhereInput {
+      return {
+        isPublished: true,
+        moderationStatus: 'APPROVED',
+        stock: { gt: 0 },
+
+        ...(query.search
+          ? {
+              OR: [
+                { title: { contains: query.search } },
+                { sku: { contains: query.search } },
+                { description: { contains: query.search } },
+                {
+                  category: {
+                    name: { contains: query.search },
+                  },
+                },
+              ],
+            }
+          : {}),
+
+        ...(!options?.ignoreCategory && query.category
+          ? { category: { slug: query.category } }
+          : {}),
+
+        ...(query.sellerId ? { sellerId: query.sellerId } : {}),
+
+        ...(query.storeSlug
+          ? {
+              seller: {
+                storeSlug: query.storeSlug,
+                role: 'SELLER',
+                isSellerApproved: true,
+              },
+            }
+          : {}),
+
+        ...(typeof query.minPrice === 'number' || typeof query.maxPrice === 'number'
+          ? {
+              price: {
+                ...(typeof query.minPrice === 'number' ? { gte: query.minPrice } : {}),
+                ...(typeof query.maxPrice === 'number' ? { lte: query.maxPrice } : {}),
+              },
+            }
+          : {}),
+
+        ...(query.inStock ? { stock: { gt: 0 } } : {}),
+      };
+    }
+
+    private getProductsOrderBy(
+      sort?: QueryProductsDto['sort'],
+    ): Prisma.ProductOrderByWithRelationInput {
+      return sort === 'oldest'
+        ? { createdAt: 'asc' }
+        : sort === 'price_asc'
+        ? { price: 'asc' }
+        : sort === 'price_desc'
+        ? { price: 'desc' }
+        : sort === 'title_asc'
+        ? { title: 'asc' }
+        : sort === 'title_desc'
+        ? { title: 'desc' }
+        : { createdAt: 'desc' };
+    }
   
   private generateRandomSku() {
     const random = Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -44,63 +112,8 @@ export class ProductsService {
     const limit = query.limit ?? 12;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.ProductWhereInput = {
-      isPublished: true,
-      moderationStatus: 'APPROVED',
-
-      ...(query.search
-        ? {
-            OR: [
-              { title: { contains: query.search} },
-              { sku: { contains: query.search} },
-              { description: { contains: query.search} },
-              {
-                category: {
-                  name: { contains: query.search},
-                },
-              },
-            ],
-          }
-        : {}),
-
-      ...(query.category ? { category: { slug: query.category } } : {}),
-
-      ...(query.sellerId ? { sellerId: query.sellerId } : {}),
-
-      ...(query.storeSlug
-        ? {
-            seller: {
-              storeSlug: query.storeSlug,
-              role: 'SELLER',
-              isSellerApproved: true,
-            },
-          }
-        : {}),
-
-      ...(typeof query.minPrice === 'number' || typeof query.maxPrice === 'number'
-        ? {
-            price: {
-              ...(typeof query.minPrice === 'number' ? { gte: query.minPrice } : {}),
-              ...(typeof query.maxPrice === 'number' ? { lte: query.maxPrice } : {}),
-            },
-          }
-        : {}),
-
-      ...(query.inStock ? { stock: { gt: 0 } } : {}),
-    };
-
-    const orderBy: Prisma.ProductOrderByWithRelationInput =
-      query.sort === 'oldest'
-        ? { createdAt: 'asc' }
-        : query.sort === 'price_asc'
-        ? { price: 'asc' }
-        : query.sort === 'price_desc'
-        ? { price: 'desc' }
-        : query.sort === 'title_asc'
-        ? { title: 'asc' }
-        : query.sort === 'title_desc'
-        ? { title: 'desc' }
-        : { createdAt: 'desc' };
+    const where = this.buildProductsWhere(query);
+    const orderBy = this.getProductsOrderBy(query.sort);
 
     const [items, total] = await Promise.all([
       this.prisma.product.findMany({
@@ -133,13 +146,51 @@ export class ProductsService {
       pages: Math.ceil(total / limit),
     };
   }
+  async getCategoryCounts(query: QueryProductsDto) {
+    const where = this.buildProductsWhere(query, { ignoreCategory: true });
+
+    const grouped = await this.prisma.product.groupBy({
+      by: ['categoryId'],
+      where,
+      _count: {
+        _all: true,
+      },
+    });
+
+    const categories = await this.prisma.category.findMany({
+      orderBy: { name: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+      },
+    });
+
+    const countsMap = new Map(
+      grouped.map((item) => [item.categoryId, item._count._all]),
+    );
+
+    return categories
+      .map((category) => ({
+        ...category,
+        count: countsMap.get(category.id) ?? 0,
+      }))
+      .filter((category) => {
+        if (query.search) {
+          return category.count > 0;
+        }
+
+        return true;
+      });
+  }
 
   async findOneBySlug(slug: string) {
     const product = await this.prisma.product.findFirst({
       where: {
         slug,
         isPublished: true,
-        moderationStatus: 'APPROVED'
+        moderationStatus: 'APPROVED',
+        stock: { gt: 0 },
       },
       include: {
         images: { orderBy: { position: 'asc' } },
@@ -219,7 +270,7 @@ export class ProductsService {
       },
     });
   }
-    async bulkUploadFromCsv(userId: string, file: Express.Multer.File) {
+    async bulkUploadFromExcel(userId: string, file: Express.Multer.File) {
       const seller = await this.prisma.user.findUnique({
         where: { id: userId },
       });
@@ -228,36 +279,36 @@ export class ProductsService {
         throw new ForbiddenException('Seller is not approved');
       }
 
-      const content = file.buffer.toString('utf-8');
-
-      let rows: Record<string, string>[] = [];
+      const workbook = new ExcelJS.Workbook();
 
       try {
-        rows = parse(content, {
-          columns: true,
-          skip_empty_lines: true,
-          trim: true,
-          delimiter: ';',
-        });
+        await workbook.xlsx.load(file.buffer as any);
       } catch {
-        throw new BadRequestException('Не удалось прочитать CSV-файл');
+        throw new BadRequestException('Не удалось прочитать Excel-файл');
       }
 
-      if (!rows.length) {
-        throw new BadRequestException('CSV-файл пустой');
+      const sheet = workbook.getWorksheet('Товары') || workbook.worksheets[0];
+
+      if (!sheet) {
+        throw new BadRequestException('В Excel-файле отсутствует лист с товарами');
       }
+
+      const headerRow = sheet.getRow(1);
+      const rawHeaderValues = Array.isArray(headerRow.values) ? headerRow.values : [];
+      const headers = rawHeaderValues
+        .slice(1)
+        .map((value) => String(value || '').trim());
 
       const requiredHeaders = [
-        'title',
-        'sku',
-        'categorySlug',
-        'price',
-        'stock',
-        'description',
-        'compatibleModels',
+        'Название',
+        'Артикул',
+        'Категория',
+        'Цена',
+        'Остаток',
+        'Описание',
+        'Совместимые модели',
       ];
 
-      const headers = Object.keys(rows[0] || {});
       for (const header of requiredHeaders) {
         if (!headers.includes(header)) {
           throw new BadRequestException(
@@ -266,51 +317,89 @@ export class ProductsService {
         }
       }
 
+      const headerIndexMap = new Map<string, number>();
+      headers.forEach((header, index) => {
+        headerIndexMap.set(header, index + 1);
+      });
+
       const created: any[] = [];
       const errors: { row: number; message: string }[] = [];
 
-      for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
+      for (let rowNumber = 2; rowNumber <= sheet.rowCount; rowNumber++) {
+        const excelRow = sheet.getRow(rowNumber);
+
+        const title = String(
+          excelRow.getCell(headerIndexMap.get('Название')!).value || '',
+        ).trim();
+
+        const rawSku = String(
+          excelRow.getCell(headerIndexMap.get('Артикул')!).value || '',
+        ).trim();
+
+        const categoryName = String(
+          excelRow.getCell(headerIndexMap.get('Категория')!).value || '',
+        ).trim();
+
+        const priceRaw = excelRow.getCell(headerIndexMap.get('Цена')!).value;
+        const stockRaw = excelRow.getCell(headerIndexMap.get('Остаток')!).value;
+
+        const description = String(
+          excelRow.getCell(headerIndexMap.get('Описание')!).value || '',
+        ).trim();
+
+        const compatibleModels = String(
+          excelRow.getCell(headerIndexMap.get('Совместимые модели')!).value || '',
+        ).trim();
+
+        const isEmptyRow =
+          !title &&
+          !rawSku &&
+          !categoryName &&
+          !priceRaw &&
+          !stockRaw &&
+          !description &&
+          !compatibleModels;
+
+        if (isEmptyRow) {
+          continue;
+        }
 
         try {
-          const title = String(row.title || '').trim();
-          const rawSku = String(row.sku || '').trim();
-          const categorySlug = String(row.categorySlug || '').trim();
-          const description = String(row.description || '').trim();
-          const price = Number(row.price);
-          const stock = Number(row.stock);
-          const compatibleModels = String(row.compatibleModels || '').trim();
+          const price = Number(priceRaw);
+          const stock = Number(stockRaw);
 
           if (!title) {
-            throw new Error('Не заполнено поле title');
+            throw new Error('Не заполнено поле "Название"');
           }
 
           if (!rawSku) {
-            throw new Error('Не заполнено поле sku');
+            throw new Error('Не заполнено поле "Артикул"');
           }
 
-          if (!categorySlug) {
-            throw new Error('Не заполнено поле categorySlug');
+          if (!categoryName) {
+            throw new Error('Не заполнено поле "Категория"');
           }
 
           if (!description) {
-            throw new Error('Не заполнено поле description');
+            throw new Error('Не заполнено поле "Описание"');
           }
 
           if (Number.isNaN(price) || price < 0) {
-            throw new Error('Некорректное значение price');
+            throw new Error('Некорректное значение в колонке "Цена"');
           }
 
           if (Number.isNaN(stock) || stock < 0) {
-            throw new Error('Некорректное значение stock');
+            throw new Error('Некорректное значение в колонке "Остаток"');
           }
 
           const category = await this.prisma.category.findFirst({
-            where: { slug: categorySlug },
+            where: {
+              name: categoryName,
+            },
           });
 
           if (!category) {
-            throw new Error(`Категория не найдена: ${categorySlug}`);
+            throw new Error(`Категория не найдена: ${categoryName}`);
           }
 
           const baseSlug = slugify(title, {
@@ -344,7 +433,7 @@ export class ProductsService {
           created.push(product);
         } catch (error: any) {
           errors.push({
-            row: i + 2,
+            row: rowNumber,
             message: error?.message || 'Ошибка обработки строки',
           });
         }
@@ -358,8 +447,74 @@ export class ProductsService {
       };
     }
 
-  getSellerCsvTemplate() {
-    return 'title;sku;categorySlug;price;stock;description;compatibleModels';
+  async getSellerExcelTemplate(): Promise<Buffer> {
+    const categories = await this.prisma.category.findMany({
+      orderBy: { name: 'asc' },
+      select: { name: true },
+    });
+
+    const workbook = new ExcelJS.Workbook();
+
+    const productsSheet = workbook.addWorksheet('Товары');
+    const categoriesSheet = workbook.addWorksheet('Категории');
+
+    const headers = [
+      'Название',
+      'Артикул',
+      'Категория',
+      'Цена',
+      'Остаток',
+      'Описание',
+      'Совместимые модели',
+    ];
+
+    productsSheet.addRow(headers);
+
+    const headerRow = productsSheet.getRow(1);
+    headerRow.font = { bold: true };
+
+    productsSheet.columns = [
+      { key: 'title', width: 30 },
+      { key: 'sku', width: 20 },
+      { key: 'category', width: 24 },
+      { key: 'price', width: 14 },
+      { key: 'stock', width: 14 },
+      { key: 'description', width: 40 },
+      { key: 'compatibleModels', width: 28 },
+    ];
+
+    categoriesSheet.addRow(['Название категории']);
+    categoriesSheet.getRow(1).font = { bold: true };
+
+    for (const category of categories) {
+      categoriesSheet.addRow([category.name]);
+    }
+
+    const lastCategoryRow = Math.max(categories.length + 1, 2);
+
+    for (let row = 2; row <= 500; row++) {
+      productsSheet.getCell(`C${row}`).dataValidation = {
+        type: 'list',
+        allowBlank: false,
+        formulae: [`Категории!$A$2:$A$${lastCategoryRow}`],
+        showErrorMessage: true,
+        errorTitle: 'Неверная категория',
+        error: 'Выберите категорию из выпадающего списка',
+      };
+    }
+
+    productsSheet.getCell('A2').value = 'Дисплей iPhone 11';
+    productsSheet.getCell('B2').value = 'IP11-INCELL-01';
+    if (categories.length > 0) {
+      productsSheet.getCell('C2').value = categories[0].name;
+    }
+    productsSheet.getCell('D2').value = 120;
+    productsSheet.getCell('E2').value = 5;
+    productsSheet.getCell('F2').value = 'Качественный дисплей';
+    productsSheet.getCell('G2').value = 'iPhone 11';
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buffer);
   }
 
   async findSellerProducts(userId: string) {

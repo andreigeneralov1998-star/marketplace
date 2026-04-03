@@ -241,6 +241,16 @@ export default function AccountPage() {
             </div>
           }
         />
+        {user?.role === 'BUYER' && (
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link
+              href="/seller/profile"
+              className="inline-flex h-11 items-center justify-center rounded-xl bg-[#F5A623] px-5 text-sm font-semibold text-[#111827] transition hover:bg-[#E69512]"
+            >
+              Стать продавцом
+            </Link>
+          </div>
+        )}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

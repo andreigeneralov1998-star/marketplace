@@ -1,22 +1,42 @@
 'use client';
 
-import { useEffect, useState, ChangeEvent, FormEvent } from 'react';
-import { getSellerProfile, updateSellerProfile } from '@/shared/api/users';
+import { ChangeEvent, FormEvent, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 
-type ProfileState = {
+import { useAuthStore } from '@/store/auth-store';
+import SellerProfileForm from '@/components/seller/seller-profile-form';
+import { applyForSeller, getMySellerApplication } from '@/lib/api';
+
+type SellerApplicationStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+type SellerApplication = {
+  id: number;
+  userId: string;
+  status: SellerApplicationStatus;
   lastName: string;
   firstName: string;
-  middleName: string;
+  middleName?: string | null;
   phone: string;
   city: string;
   warehouseAddress: string;
   storeName: string;
-  storeDescription: string;
+  storeSlug: string;
+  storeDescription?: string | null;
   storeLogo?: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export default function SellerProfilePage() {
-  const [form, setForm] = useState<ProfileState>({
+  const router = useRouter();
+  const { user, fetchMe } = useAuthStore();
+
+  const [application, setApplication] = useState<SellerApplication | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
+  const [form, setForm] = useState({
     lastName: '',
     firstName: '',
     middleName: '',
@@ -25,320 +45,268 @@ export default function SellerProfilePage() {
     warehouseAddress: '',
     storeName: '',
     storeDescription: '',
-    storeLogo: '',
   });
 
-  const [logoFile, setLogoFile] = useState<File | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState('');
-  const [profileComplete, setProfileComplete] = useState(false);
+  const [logo, setLogo] = useState<File | null>(null);
 
   useEffect(() => {
-    const load = async () => {
+    const init = async () => {
       try {
-        const data = await getSellerProfile();
+        await fetchMe();
+        const currentUser = useAuthStore.getState().user;
 
-        setForm({
-          lastName: data.lastName || '',
-          firstName: data.firstName || '',
-          middleName: data.middleName || '',
-          phone: data.phone || '',
-          city: data.city || '',
-          warehouseAddress: data.warehouseAddress || '',
-          storeName: data.storeName || '',
-          storeDescription: data.storeDescription || '',
-          storeLogo: data.storeLogo || '',
-        });
+        if (!currentUser) {
+          setLoading(false);
+          return;
+        }
 
-        setProfileComplete(!!data.isProfileComplete);
-      } catch (e: any) {
-        setMessage(e?.response?.data?.message || 'Не удалось загрузить профиль');
+        if (currentUser.role === 'SELLER') {
+          setLoading(false);
+          return;
+        }
+
+        if (currentUser.role === 'BUYER') {
+          try {
+            const data = await getMySellerApplication();
+
+            if (data) {
+              setApplication(data);
+              setForm({
+                lastName: data.lastName || '',
+                firstName: data.firstName || '',
+                middleName: data.middleName || '',
+                phone: data.phone || '',
+                city: data.city || '',
+                warehouseAddress: data.warehouseAddress || '',
+                storeName: data.storeName || '',
+                storeDescription: data.storeDescription || '',
+              });
+            }
+          } catch {
+            // если заявки нет — это норм
+          }
+        }
       } finally {
         setLoading(false);
       }
     };
 
-    load();
-  }, []);
+    init();
+  }, [fetchMe]);
 
   const handleChange = (
     e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
+    const { name, value } = e.target;
+
     setForm((prev) => ({
       ...prev,
-      [e.target.name]: e.target.value,
+      [name]: value,
     }));
   };
 
-  const handleLogoChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] || null;
-    setLogoFile(file);
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
+    setLogo(file);
   };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setSaving(true);
-    setMessage('');
 
     try {
-      const fd = new FormData();
-      fd.append('lastName', form.lastName);
-      fd.append('firstName', form.firstName);
-      fd.append('middleName', form.middleName);
-      fd.append('phone', form.phone);
-      fd.append('city', form.city);
-      fd.append('warehouseAddress', form.warehouseAddress);
-      fd.append('storeName', form.storeName);
-      fd.append('storeDescription', form.storeDescription);
+      setSubmitting(true);
 
-      if (logoFile) {
-        fd.append('logo', logoFile);
+      const formData = new FormData();
+      formData.append('lastName', form.lastName);
+      formData.append('firstName', form.firstName);
+      formData.append('middleName', form.middleName);
+      formData.append('phone', form.phone);
+      formData.append('city', form.city);
+      formData.append('warehouseAddress', form.warehouseAddress);
+      formData.append('storeName', form.storeName);
+      formData.append('storeDescription', form.storeDescription);
+
+      if (logo) {
+        formData.append('logo', logo);
       }
 
-      const data = await updateSellerProfile(fd);
+      await applyForSeller(formData);
 
-      setForm((prev) => ({
-        ...prev,
-        storeLogo: data.storeLogo || prev.storeLogo,
-      }));
+      const updated = await getMySellerApplication();
+      setApplication(updated);
 
-      setProfileComplete(!!data.isProfileComplete);
-      setMessage('Профиль успешно сохранён');
-    } catch (e: any) {
-      setMessage(e?.response?.data?.message || 'Ошибка при сохранении профиля');
+      toast.success('Заявка отправлена');
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.message ||
+        err?.message ||
+        'Не удалось отправить заявку';
+
+      toast.error(Array.isArray(message) ? message.join(', ') : message);
     } finally {
-      setSaving(false);
+      setSubmitting(false);
     }
   };
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="rounded-[20px] border border-[#E5E7EB] bg-white p-6 shadow-sm">
-          <div className="h-8 w-52 animate-pulse rounded bg-[#F3F4F6]" />
-          <div className="mt-3 h-4 w-80 animate-pulse rounded bg-[#F3F4F6]" />
+      <section className="grid gap-6">
+        <div className="rounded-[20px] border border-[#E5E7EB] bg-white p-6 md:p-8">
+          Загрузка...
         </div>
+      </section>
+    );
+  }
 
-        <div className="rounded-[20px] border border-[#E5E7EB] bg-white p-6 shadow-sm">
-          <div className="grid gap-4 md:grid-cols-2">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <div key={index}>
-                <div className="mb-2 h-4 w-28 animate-pulse rounded bg-[#F3F4F6]" />
-                <div className="h-11 animate-pulse rounded-xl bg-[#F3F4F6]" />
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-4">
-            <div className="mb-2 h-4 w-32 animate-pulse rounded bg-[#F3F4F6]" />
-            <div className="h-28 animate-pulse rounded-xl bg-[#F3F4F6]" />
-          </div>
+  if (!user) {
+    return (
+      <section className="grid gap-6">
+        <div className="rounded-[20px] border border-[#E5E7EB] bg-white p-6 md:p-8">
+          Нужно войти в аккаунт
         </div>
-      </div>
+      </section>
+    );
+  }
+
+  if (user.role === 'SELLER') {
+    return <SellerProfileForm />;
+  }
+
+  if (application?.status === 'PENDING') {
+    return (
+      <section className="grid gap-6">
+        <div className="rounded-[20px] border border-[#E5E7EB] bg-white p-6 md:p-8">
+          <h1 className="text-2xl font-bold text-[#111827]">Заявка отправлена</h1>
+          <p className="mt-2 text-sm text-[#6B7280]">
+            Ваша заявка на получение роли продавца находится на рассмотрении.
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  if (application?.status === 'APPROVED') {
+    return (
+      <section className="grid gap-6">
+        <div className="rounded-[20px] border border-[#E5E7EB] bg-white p-6 md:p-8">
+          <h1 className="text-2xl font-bold text-[#111827]">Заявка одобрена</h1>
+          <p className="mt-2 text-sm text-[#6B7280]">
+            Ваша заявка подтверждена. Обновите страницу или войдите заново.
+          </p>
+
+          <button
+            type="button"
+            onClick={() => router.refresh()}
+            className="mt-6 inline-flex h-11 items-center justify-center rounded-xl bg-[#F5A623] px-5 text-sm font-semibold text-[#111827] transition hover:bg-[#E69512]"
+          >
+            Обновить страницу
+          </button>
+        </div>
+      </section>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-[20px] border border-[#E5E7EB] bg-white p-6 shadow-sm">
-        <h1 className="text-[32px] font-bold leading-10 text-[#111827]">
-          Профиль продавца
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-[#6B7280]">
-          Заполните информацию о продавце и магазине. Эти данные используются
-          для отображения витрины и повышения доверия покупателей.
+    <section className="grid gap-6">
+      <div className="rounded-[20px] border border-[#E5E7EB] bg-white p-6 md:p-8">
+        <h1 className="text-2xl font-bold text-[#111827]">Стать продавцом</h1>
+        <p className="mt-2 text-sm text-[#6B7280]">
+          Заполните данные магазина. После подтверждения администратором ваш аккаунт станет продавцом.
         </p>
-      </div>
 
-      {!profileComplete && (
-        <div className="rounded-[20px] border border-[#FCD34D] bg-[#FFF8DB] p-4 text-sm text-[#92400E] shadow-sm">
-          Заполните обязательные поля профиля. Пока профиль не заполнен
-          полностью, магазин может не отображаться покупателям.
-        </div>
-      )}
-
-      <form
-        onSubmit={handleSubmit}
-        className="rounded-[20px] border border-[#E5E7EB] bg-white p-6 shadow-sm"
-      >
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <label className="mb-2 block text-sm font-medium text-[#111827]">
-              Фамилия
-            </label>
-            <input
-              name="lastName"
-              placeholder="Введите фамилию"
-              value={form.lastName}
-              onChange={handleChange}
-              className="h-11 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#F5A623] focus:ring-4 focus:ring-[#F5A623]/15"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-medium text-[#111827]">
-              Имя
-            </label>
-            <input
-              name="firstName"
-              placeholder="Введите имя"
-              value={form.firstName}
-              onChange={handleChange}
-              className="h-11 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#F5A623] focus:ring-4 focus:ring-[#F5A623]/15"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-medium text-[#111827]">
-              Отчество
-            </label>
-            <input
-              name="middleName"
-              placeholder="Введите отчество"
-              value={form.middleName}
-              onChange={handleChange}
-              className="h-11 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#F5A623] focus:ring-4 focus:ring-[#F5A623]/15"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-medium text-[#111827]">
-              Номер телефона
-            </label>
-            <input
-              name="phone"
-              placeholder="Введите номер телефона"
-              value={form.phone}
-              onChange={handleChange}
-              className="h-11 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#F5A623] focus:ring-4 focus:ring-[#F5A623]/15"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-medium text-[#111827]">
-              Город
-            </label>
-            <input
-              name="city"
-              placeholder="Введите город"
-              value={form.city}
-              onChange={handleChange}
-              className="h-11 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#F5A623] focus:ring-4 focus:ring-[#F5A623]/15"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-medium text-[#111827]">
-              Адрес склада / магазина
-            </label>
-            <input
-              name="warehouseAddress"
-              placeholder="Введите адрес склада или магазина"
-              value={form.warehouseAddress}
-              onChange={handleChange}
-              className="h-11 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#F5A623] focus:ring-4 focus:ring-[#F5A623]/15"
-              required
-            />
-          </div>
-        </div>
-
-        <div className="mt-6 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-          <div className="space-y-4">
-            <div>
-              <label className="mb-2 block text-sm font-medium text-[#111827]">
-                Название магазина на маркетплейсе
-              </label>
-              <input
-                name="storeName"
-                placeholder="Введите название магазина"
-                value={form.storeName}
-                onChange={handleChange}
-                className="h-11 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#F5A623] focus:ring-4 focus:ring-[#F5A623]/15"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-[#111827]">
-                О магазине
-              </label>
-              <textarea
-                name="storeDescription"
-                placeholder="Кратко расскажите о магазине, ассортименте и преимуществах"
-                value={form.storeDescription}
-                onChange={handleChange}
-                className="min-h-[140px] w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#F5A623] focus:ring-4 focus:ring-[#F5A623]/15"
-              />
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] p-4">
-            <label className="block text-sm font-medium text-[#111827]">
-              Логотип магазина
-            </label>
-
-            <div className="mt-4 flex items-center gap-4">
-              <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white">
-                {form.storeLogo ? (
-                  <img
-                    src={`${process.env.NEXT_PUBLIC_API_URL}${form.storeLogo}`}
-                    alt="Логотип магазина"
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <span className="text-xs font-medium text-[#9CA3AF]">
-                    Нет logo
-                  </span>
-                )}
-              </div>
-
-              <div className="flex-1">
-                <input
-                  type="file"
-                  accept=".jpg,.jpeg,.png,.webp"
-                  onChange={handleLogoChange}
-                  className="block w-full text-sm text-[#6B7280] file:mr-4 file:h-11 file:rounded-xl file:border-0 file:bg-[#FFF4DD] file:px-4 file:text-sm file:font-semibold file:text-[#111827] hover:file:bg-[#FFECC4]"
-                />
-                <p className="mt-2 text-xs leading-5 text-[#6B7280]">
-                  Поддерживаются JPG, PNG, WEBP.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {message && (
-          <div
-            className={`mt-6 rounded-2xl border p-4 text-sm ${
-              message.toLowerCase().includes('успеш')
-                ? 'border-[#BBF7D0] bg-[#F0FDF4] text-[#166534]'
-                : 'border-[#FECACA] bg-[#FEF2F2] text-[#991B1B]'
-            }`}
-          >
-            {message}
+        {application?.status === 'REJECTED' && (
+          <div className="mt-4 rounded-2xl border border-[#F3D0D0] bg-[#FEF3F2] px-4 py-3 text-sm font-medium text-[#B42318]">
+            Предыдущая заявка была отклонена. Исправьте данные и отправьте повторно.
           </div>
         )}
 
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-[#E5E7EB] pt-6">
-          <p className="text-sm text-[#6B7280]">
-            После сохранения обновится информация о вашем магазине.
-          </p>
+        <form onSubmit={handleSubmit} className="mt-6 grid gap-4">
+          <input
+            name="lastName"
+            value={form.lastName}
+            onChange={handleChange}
+            placeholder="Фамилия"
+            className="h-11 rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm text-[#111827] outline-none transition focus:border-[#F5A623] focus:shadow-[0_0_0_4px_rgba(245,166,35,0.14)]"
+            required
+          />
+
+          <input
+            name="firstName"
+            value={form.firstName}
+            onChange={handleChange}
+            placeholder="Имя"
+            className="h-11 rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm text-[#111827] outline-none transition focus:border-[#F5A623] focus:shadow-[0_0_0_4px_rgba(245,166,35,0.14)]"
+            required
+          />
+
+          <input
+            name="middleName"
+            value={form.middleName}
+            onChange={handleChange}
+            placeholder="Отчество"
+            className="h-11 rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm text-[#111827] outline-none transition focus:border-[#F5A623] focus:shadow-[0_0_0_4px_rgba(245,166,35,0.14)]"
+          />
+
+          <input
+            name="phone"
+            value={form.phone}
+            onChange={handleChange}
+            placeholder="Телефон"
+            className="h-11 rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm text-[#111827] outline-none transition focus:border-[#F5A623] focus:shadow-[0_0_0_4px_rgba(245,166,35,0.14)]"
+            required
+          />
+
+          <input
+            name="city"
+            value={form.city}
+            onChange={handleChange}
+            placeholder="Город"
+            className="h-11 rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm text-[#111827] outline-none transition focus:border-[#F5A623] focus:shadow-[0_0_0_4px_rgba(245,166,35,0.14)]"
+            required
+          />
+
+          <input
+            name="warehouseAddress"
+            value={form.warehouseAddress}
+            onChange={handleChange}
+            placeholder="Адрес склада"
+            className="h-11 rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm text-[#111827] outline-none transition focus:border-[#F5A623] focus:shadow-[0_0_0_4px_rgba(245,166,35,0.14)]"
+            required
+          />
+
+          <input
+            name="storeName"
+            value={form.storeName}
+            onChange={handleChange}
+            placeholder="Название магазина"
+            className="h-11 rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm text-[#111827] outline-none transition focus:border-[#F5A623] focus:shadow-[0_0_0_4px_rgba(245,166,35,0.14)]"
+            required
+          />
+
+          <textarea
+            name="storeDescription"
+            value={form.storeDescription}
+            onChange={handleChange}
+            placeholder="Описание магазина"
+            className="min-h-[140px] rounded-xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm text-[#111827] outline-none transition focus:border-[#F5A623] focus:shadow-[0_0_0_4px_rgba(245,166,35,0.14)]"
+          />
+
+          <input
+            type="file"
+            accept=".jpg,.jpeg,.png,.webp"
+            onChange={handleFileChange}
+            className="rounded-xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm text-[#111827]"
+          />
 
           <button
             type="submit"
-            disabled={saving}
-            className="inline-flex h-12 items-center justify-center rounded-xl bg-[#F5A623] px-5 text-sm font-semibold text-[#111827] transition hover:bg-[#E69512] disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={submitting}
+            className="inline-flex h-11 items-center justify-center rounded-xl bg-[#F5A623] px-5 text-sm font-semibold text-[#111827] transition hover:bg-[#E69512] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {saving ? 'Сохранение...' : 'Сохранить изменения'}
+            {submitting ? 'Отправка...' : 'Отправить заявку'}
           </button>
-        </div>
-      </form>
-    </div>
+        </form>
+      </div>
+    </section>
   );
 }

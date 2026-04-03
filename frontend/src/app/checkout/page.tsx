@@ -11,7 +11,7 @@ import { api } from '@/lib/api';
 import { formatPrice } from '@/lib/utils';
 import { PageTitle } from '@/components/ui/page-title';
 
-type DeliveryMethod = 'EMS' | 'EUROPOST' | 'BELPOST' | 'PICKUP';
+type DeliveryMethod = 'EMS' | 'EUROPOCHTA' | 'BELPOCHTA' | 'PICKUP_TOPSET';
 
 type CartItem = {
   id: string;
@@ -55,19 +55,19 @@ const DELIVERY_OPTIONS: {
     icon: Truck,
   },
   {
-    value: 'EUROPOST',
+    value: 'EUROPOCHTA',
     title: 'Европочта',
     description: 'Получение через отделение Европочты.',
     icon: Package,
   },
   {
-    value: 'BELPOST',
+    value: 'BELPOCHTA',
     title: 'Белпочта',
     description: 'Доставка через отделение Белпочты.',
     icon: Package,
   },
   {
-    value: 'PICKUP',
+    value: 'PICKUP_TOPSET',
     title: 'Самовывоз с магазина TOPSET',
     description: 'Получение заказа в TOPSET.',
     icon: MapPin,
@@ -101,7 +101,7 @@ export default function CheckoutPage() {
     deliveryMethod: 'EMS',
   });
 
-  const isPickup = form.deliveryMethod === 'PICKUP';
+  const isPickup = form.deliveryMethod === 'PICKUP_TOPSET';
 
   useEffect(() => {
     const loadCart = async () => {

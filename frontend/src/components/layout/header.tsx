@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import Image from 'next/image';
 import {
   Search,
   ShoppingCart,
@@ -95,12 +96,19 @@ export function Header() {
             href="/"
             className="group flex shrink-0 items-center gap-3 rounded-2xl transition"
           >
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white text-lg font-bold text-[#111827] shadow-[0_8px_24px_rgba(15,23,42,0.05)] transition duration-200 group-hover:-translate-y-0.5 group-hover:shadow-[0_14px_30px_rgba(15,23,42,0.08)]">
-              R
+            <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-[0_8px_24px_rgba(15,23,42,0.05)] transition duration-200 group-hover:-translate-y-0.5 group-hover:shadow-[0_14px_30px_rgba(15,23,42,0.08)]">
+              <Image
+                src="/brand-icon.png"
+                alt="Рынок Бай"
+                width={34}
+                height={34}
+                priority
+                className="h-[34px] w-[34px] object-contain"
+              />
             </div>
 
             <div className="hidden flex-col leading-none sm:flex">
-              <span className="text-[15px] font-semibold tracking-tight text-[#111827]">
+              <span className="text-[16px] font-semibold tracking-tight text-[#111827]">
                 Рынок Бай
               </span>
               <span className="mt-1 text-xs font-medium text-[#6B7280]">

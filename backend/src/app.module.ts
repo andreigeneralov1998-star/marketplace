@@ -11,6 +11,7 @@ import { CartModule } from './cart/cart.module';
 import { SellerBalanceModule } from './seller-balance/seller-balance.module';
 import { SellerWithdrawalsModule } from './seller-withdrawals/seller-withdrawals.module';
 import { UsersModule } from './users/users.module';
+import { HomepageBannersModule } from './homepage-banners/homepage-banners.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { UsersModule } from './users/users.module';
     UsersModule,
     CartModule,
     SellerWithdrawalsModule,
+    HomepageBannersModule,
   ],
 })
 export class AppModule {}

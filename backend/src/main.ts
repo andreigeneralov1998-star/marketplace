@@ -10,7 +10,7 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
   app.use('/uploads', express.static(join(process.cwd(), 'uploads')));
-  
+
   app.enableCors({
     origin: true,
     credentials: true,
@@ -23,8 +23,6 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
     }),
   );
-
-  app.use('/uploads', express.static(join(process.cwd(), 'uploads')));
 
   const { admin, adminRouter } = await buildAdminRouter();
   app.use(admin.options.rootPath, adminRouter);

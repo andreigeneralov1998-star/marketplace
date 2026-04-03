@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import type { Category, ProductsResponse } from '@/types';
+import type { CategoryWithCount, ProductsResponse } from '@/types';
 import { ProductCard } from '@/components/product/product-card';
 import { PageTitle } from '@/components/ui/page-title';
 
@@ -11,6 +11,8 @@ type SearchParams = {
   inStock?: string;
   sort?: string;
   page?: string;
+  sellerId?: string;
+  storeSlug?: string;
 };
 
 function buildProductsUrl(searchParams: SearchParams) {
@@ -40,10 +42,24 @@ async function getProducts(searchParams: SearchParams): Promise<ProductsResponse
   return res.json();
 }
 
-async function getCategories(): Promise<Category[]> {
-  const res = await fetch('http://localhost:4000/api/categories', {
-    cache: 'no-store',
-  });
+async function getCategoryCounts(
+  searchParams: SearchParams,
+): Promise<CategoryWithCount[]> {
+  const params = new URLSearchParams();
+
+  if (searchParams.search) params.set('search', searchParams.search);
+  if (searchParams.minPrice) params.set('minPrice', searchParams.minPrice);
+  if (searchParams.maxPrice) params.set('maxPrice', searchParams.maxPrice);
+  if (searchParams.inStock) params.set('inStock', searchParams.inStock);
+  if (searchParams.sellerId) params.set('sellerId', searchParams.sellerId);
+  if ((searchParams as any).storeSlug) params.set('storeSlug', (searchParams as any).storeSlug);
+
+  const res = await fetch(
+    `http://localhost:4000/api/products/category-counts?${params.toString()}`,
+    {
+      cache: 'no-store',
+    },
+  );
 
   if (!res.ok) {
     return [];
@@ -65,6 +81,27 @@ function buildPageLink(searchParams: SearchParams, nextPage: number) {
 
   return `/catalog?${params.toString()}`;
 }
+function buildCatalogLink(searchParams: SearchParams, overrides: Partial<SearchParams> = {}) {
+  const params = new URLSearchParams();
+
+  const nextParams: SearchParams = {
+    ...searchParams,
+    ...overrides,
+  };
+
+  if (nextParams.search) params.set('search', nextParams.search);
+  if (nextParams.category) params.set('category', nextParams.category);
+  if (nextParams.minPrice) params.set('minPrice', nextParams.minPrice);
+  if (nextParams.maxPrice) params.set('maxPrice', nextParams.maxPrice);
+  if (nextParams.inStock) params.set('inStock', nextParams.inStock);
+  if (nextParams.sort) params.set('sort', nextParams.sort);
+  if (nextParams.sellerId) params.set('sellerId', nextParams.sellerId);
+  if (nextParams.storeSlug) params.set('storeSlug', nextParams.storeSlug);
+  if (nextParams.page) params.set('page', nextParams.page);
+
+  const query = params.toString();
+  return query ? `/catalog?${query}` : '/catalog';
+}
 
 export default async function CatalogPage({
   searchParams,
@@ -75,7 +112,7 @@ export default async function CatalogPage({
 
   const [{ items: products, total, page, pages }, categories] = await Promise.all([
     getProducts(resolvedSearchParams),
-    getCategories(),
+    getCategoryCounts(resolvedSearchParams),
   ]);
 
   return (
@@ -102,7 +139,10 @@ export default async function CatalogPage({
         method="GET"
         className="rounded-[20px] border border-[#E5E7EB] bg-white p-5 md:p-6"
       >
-        <div className="grid gap-4 xl:grid-cols-6">
+        {resolvedSearchParams.category ? (
+          <input type="hidden" name="category" value={resolvedSearchParams.category} />
+        ) : null}
+        <div className="grid gap-4 xl:grid-cols-5">
           <div className="xl:col-span-2">
             <label className="mb-2 block text-[13px] font-semibold text-[#111827]">
               Поиск
@@ -116,24 +156,6 @@ export default async function CatalogPage({
                 className="h-full w-full bg-transparent text-sm text-[#111827] outline-none placeholder:text-[#9CA3AF]"
               />
             </div>
-          </div>
-
-          <div>
-            <label className="mb-2 block text-[13px] font-semibold text-[#111827]">
-              Категория
-            </label>
-            <select
-              name="category"
-              defaultValue={resolvedSearchParams.category ?? ''}
-              className="h-11 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm text-[#111827] outline-none transition focus:border-[#F5A623] focus:shadow-[0_0_0_4px_rgba(245,166,35,0.14)]"
-            >
-              <option value="">Все категории</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.slug}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
           </div>
 
           <div>
@@ -213,58 +235,102 @@ export default async function CatalogPage({
         </div>
       </form>
 
-      {products.length === 0 ? (
-        <div className="rounded-[20px] border border-dashed border-[#E5E7EB] bg-white px-6 py-12 text-center">
-          <h3 className="text-lg font-semibold text-[#111827]">
-            По вашему запросу ничего не найдено
-          </h3>
-          <p className="mt-2 text-sm leading-6 text-[#6B7280]">
-            Попробуйте изменить параметры фильтрации или сбросить текущие условия поиска.
-          </p>
+            <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start">
+        <aside className="h-fit rounded-[20px] border border-[#E5E7EB] bg-white p-4">
+          <div className="mb-4 text-sm font-semibold text-[#111827]">Категории</div>
 
-          <div className="mt-5">
+          <div className="space-y-1">
             <Link
-              href="/catalog"
-              className="inline-flex h-11 items-center justify-center rounded-xl border border-[#E5E7EB] bg-white px-5 text-sm font-semibold text-[#111827] shadow-[0_6px_18px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(15,23,42,0.08)]"
+              href={buildCatalogLink(resolvedSearchParams, {
+                category: undefined,
+                page: undefined,
+              })}
+              className={`flex items-center justify-between rounded-xl px-3 py-2 text-sm transition ${
+                !resolvedSearchParams.category
+                  ? 'bg-[#FFF4DD] font-semibold text-[#111827]'
+                  : 'text-[#374151] hover:bg-[#F9FAFB]'
+              }`}
             >
-              Сбросить фильтры
+              <span>Все категории</span>
+              <span className="text-xs text-[#6B7280]">
+                ({categories.reduce((sum, item) => sum + item.count, 0)})
+              </span>
             </Link>
+
+            {categories.map((category) => {
+              const isActive = resolvedSearchParams.category === category.slug;
+
+              return (
+                <Link
+                  key={category.id}
+                  href={buildCatalogLink(resolvedSearchParams, {
+                    category: category.slug,
+                    page: undefined,
+                  })}
+                  className={`flex items-center justify-between rounded-xl px-3 py-2 text-sm transition ${
+                    isActive
+                      ? 'bg-[#FFF4DD] font-semibold text-[#111827]'
+                      : 'text-[#374151] hover:bg-[#F9FAFB]'
+                  }`}
+                >
+                  <span className="truncate">{category.name}</span>
+                  <span className="ml-3 text-xs text-[#6B7280]">
+                    ({category.count})
+                  </span>
+                </Link>
+              );
+            })}
           </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-          {products.map((product) => (
-            <ProductCard key={product.id} product={product} />
-          ))}
-        </div>
-      )}
+        </aside>
 
-      {pages > 1 && (
-        <div className="flex items-center justify-center gap-3 pt-1">
-          {page > 1 && (
-            <Link
-              href={buildPageLink(resolvedSearchParams, page - 1)}
-              className="inline-flex h-10 items-center justify-center rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm font-semibold text-[#111827] shadow-[0_6px_18px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(15,23,42,0.08)]"
-            >
-              Назад
-            </Link>
+        <div className="grid gap-4">
+          {resolvedSearchParams.category ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex rounded-full bg-[#FFF4DD] px-3 py-1 text-xs font-semibold text-[#1F2937]">
+                Категория:{' '}
+                {categories.find((item) => item.slug === resolvedSearchParams.category)?.name ??
+                  resolvedSearchParams.category}
+              </span>
+
+              <Link
+                href={buildCatalogLink(resolvedSearchParams, {
+                  category: undefined,
+                  page: undefined,
+                })}
+                className="inline-flex rounded-full border border-[#E5E7EB] bg-white px-3 py-1 text-xs font-medium text-[#111827] transition hover:bg-[#F9FAFB]"
+              >
+                Сбросить категорию
+              </Link>
+            </div>
+          ) : null}
+
+          {products.length === 0 ? (
+            <div className="rounded-[20px] border border-dashed border-[#E5E7EB] bg-white px-6 py-12 text-center">
+              <h3 className="text-lg font-semibold text-[#111827]">
+                По вашему запросу ничего не найдено
+              </h3>
+              <p className="mt-2 text-sm leading-6 text-[#6B7280]">
+                Попробуйте изменить параметры фильтрации или сбросить текущие условия поиска.
+              </p>
+
+              <div className="mt-5">
+                <Link
+                  href="/catalog"
+                  className="inline-flex h-11 items-center justify-center rounded-xl border border-[#E5E7EB] bg-white px-5 text-sm font-semibold text-[#111827] shadow-[0_6px_18px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(15,23,42,0.08)]"
+                >
+                  Сбросить фильтры
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+              {products.map((product) => (
+                <ProductCard key={product.id} product={product} />
+              ))}
+            </div>
           )}
-
-          <span className="text-sm font-medium text-[#6B7280]">
-            Страница <span className="text-[#111827]">{page}</span> из{' '}
-            <span className="text-[#111827]">{pages}</span>
-          </span>
-
-          {page < pages && (
-            <Link
-              href={buildPageLink(resolvedSearchParams, page + 1)}
-              className="inline-flex h-10 items-center justify-center rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm font-semibold text-[#111827] shadow-[0_6px_18px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(15,23,42,0.08)]"
-            >
-              Вперед
-            </Link>
-          )}
         </div>
-      )}
+      </div>
     </section>
   );
 }

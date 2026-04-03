@@ -334,17 +334,17 @@ export function ProductForm({
                   {...register('title', {
                     required: 'Введите наименование товара',
                     maxLength: {
-                      value: 50,
-                      message: 'Максимум 50 символов',
+                      value: 100,
+                      message: 'Максимум 100 символов',
                     },
                   })}
-                  maxLength={50}
+                  maxLength={100}
                   placeholder="Например: Дисплей iPhone 13 OLED"
                   className="h-11 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#F5A623] focus:ring-4 focus:ring-[#F5A623]/15"
                 />
                 <FieldHint
                   error={errors.title?.message}
-                  counter={`${titleValue.length}/50`}
+                  counter={`${titleValue.length}/100`}
                 />
               </div>
 
@@ -461,18 +461,18 @@ export function ProductForm({
                   {...register('description', {
                     required: 'Введите описание',
                     maxLength: {
-                      value: 300,
-                      message: 'Максимум 300 символов',
+                      value: 600,
+                      message: 'Максимум 600 символов',
                     },
                   })}
-                  maxLength={300}
+                  maxLength={600}
                   rows={6}
                   placeholder="Опишите товар понятно для покупателя"
                   className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#F5A623] focus:ring-4 focus:ring-[#F5A623]/15"
                 />
                 <FieldHint
                   error={errors.description?.message}
-                  counter={`${descriptionValue.length}/300`}
+                  counter={`${descriptionValue.length}/600`}
                 />
               </div>
 
@@ -625,13 +625,13 @@ export function ProductForm({
             <div className="mt-5 space-y-3 text-sm text-[#374151]">
               <div className="flex items-center justify-between rounded-xl bg-[#F9FAFB] px-4 py-3">
                 <span>Название</span>
-                <span className="font-medium text-[#111827]">{titleValue.length}/50</span>
+                <span className="font-medium text-[#111827]">{titleValue.length}/100</span>
               </div>
 
               <div className="flex items-center justify-between rounded-xl bg-[#F9FAFB] px-4 py-3">
                 <span>Описание</span>
                 <span className="font-medium text-[#111827]">
-                  {descriptionValue.length}/300
+                  {descriptionValue.length}/600
                 </span>
               </div>
 

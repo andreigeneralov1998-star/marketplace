@@ -47,4 +47,36 @@ export class UploadsController {
       url: `/uploads/${file.filename}`,
     };
   }
+
+  @Post('homepage-banner')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: './uploads/homepage-banners',
+        filename: (_, file, cb) => {
+          const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+          cb(null, `${unique}${extname(file.originalname)}`);
+        },
+      }),
+      limits: { fileSize: 8 * 1024 * 1024 },
+      fileFilter: (_, file, cb) => {
+        if (!allowedMimeTypes.includes(file.mimetype)) {
+          return cb(
+            new BadRequestException('Разрешены только JPG, PNG, WEBP'),
+            false,
+          );
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  uploadHomepageBanner(@UploadedFile() file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('Файл не был загружен');
+    }
+
+    return {
+      url: `/uploads/homepage-banners/${file.filename}`,
+    };
+  }
 }

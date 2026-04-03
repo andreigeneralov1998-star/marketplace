@@ -1,6 +1,16 @@
+import type { Metadata } from "next";
 import "./globals.css";
 import { Header } from "@/components/layout/header";
 import ToasterProvider from "@/components/ToasterProvider";
+
+export const metadata: Metadata = {
+  title: "Рынок Бай",
+  description: "Маркетплейс запчастей для ремонта телефонов",
+  icons: {
+    icon: "/favicon.png",
+    shortcut: "/favicon.png",
+  },
+};
 
 export default function RootLayout({
   children,

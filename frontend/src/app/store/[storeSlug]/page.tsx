@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 
+
 type Store = {
   id: string;
   firstName?: string | null;
@@ -29,44 +30,54 @@ type Product = {
   };
 };
 
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/api$/, '').replace(/\/$/, '') ||
+  'http://localhost:4000';
+
 function normalizeImageSrc(src?: string | null) {
   if (!src) return '/uploads/placeholders/no-photo.png';
-  return src.startsWith('http') ? src : `http://localhost:4000${src}`;
-}
 
-function getStoreDisplayName(store: Store) {
-  if (store.storeName?.trim()) return store.storeName;
+  try {
+    if (src.startsWith('http://') || src.startsWith('https://')) {
+      const url = new URL(src);
+      return `${API_BASE}${url.pathname}`;
+    }
 
-  const fullName = `${store.firstName ?? ''} ${store.lastName ?? ''}`.trim();
-  return fullName || 'Магазин продавца';
+    return `${API_BASE}${src.startsWith('/') ? src : `/${src}`}`;
+  } catch {
+    return `${API_BASE}${src.startsWith('/') ? src : `/${src}`}`;
+  }
 }
 
 async function getStore(storeSlug: string): Promise<Store | null> {
-  const res = await fetch(`http://localhost:4000/api/stores/${storeSlug}`, {
+  const res = await fetch(`${API_BASE}/api/stores/${storeSlug}`, {
     cache: 'no-store',
   });
 
-  if (!res.ok) {
-    return null;
-  }
-
+  if (!res.ok) return null;
   return res.json();
 }
 
 async function getStoreProducts(storeSlug: string): Promise<Product[]> {
-  const res = await fetch(
-    `http://localhost:4000/api/stores/${storeSlug}/products`,
-    {
-      cache: 'no-store',
-    },
-  );
+  const res = await fetch(`${API_BASE}/api/stores/${storeSlug}/products`, {
+    cache: 'no-store',
+  });
 
-  if (!res.ok) {
-    return [];
-  }
-
+  if (!res.ok) return [];
   return res.json();
 }
+
+function getStoreDisplayName(store: Store) {
+  const fullName = [store.firstName, store.lastName]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+
+  return store.storeName?.trim() || fullName || store.email || 'Магазин';
+}
+
+
+
 
 export default async function StorePage({
   params,

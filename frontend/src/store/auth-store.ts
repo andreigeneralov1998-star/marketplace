@@ -23,6 +23,10 @@ export const useAuthStore = create<AuthState>((set) => ({
       const { data } = await api.post('/auth/login', { username, password });
       localStorage.setItem('accessToken', data.accessToken);
       await useAuthStore.getState().fetchMe();
+    } catch (error) {
+      localStorage.removeItem('accessToken');
+      set({ user: null });
+      throw error;
     } finally {
       set({ isLoading: false });
     }

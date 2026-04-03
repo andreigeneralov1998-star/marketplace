@@ -14,11 +14,48 @@ import { extname, join } from 'path';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { UpdateSellerProfileDto } from './dto/update-seller-profile.dto';
+import { Post } from '@nestjs/common';
+import { BecomeSellerDto } from './dto/become-seller.dto';
 
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
 
+  constructor(private readonly usersService: UsersService) {}
+  @UseGuards(JwtAuthGuard)
+  @Get('seller/application')
+  getMySellerApplication(@Req() req: any) {
+    return this.usersService.getMySellerApplication(req.user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('seller/application')
+  @UseInterceptors(
+    FileInterceptor('logo', {
+      storage: diskStorage({
+        destination: join(process.cwd(), 'uploads', 'store-logos'),
+        filename: (_req, file, cb) => {
+          const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+          cb(null, `${unique}${extname(file.originalname)}`);
+        },
+      }),
+      fileFilter: (_req, file, cb) => {
+        const allowed = /jpeg|jpg|png|webp/;
+        const isValid = allowed.test(file.mimetype);
+        cb(isValid ? null : new Error('Разрешены только jpeg/jpg/png/webp'), isValid);
+      },
+      limits: {
+        fileSize: 2 * 1024 * 1024,
+      },
+    }),
+  )
+  applyForSeller(
+    @Req() req: any,
+    @Body() dto: BecomeSellerDto,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    const logoUrl = file ? `/uploads/store-logos/${file.filename}` : undefined;
+    return this.usersService.applyForSeller(req.user.userId, dto, logoUrl);
+  }
   @Get('stores')
   getStores() {
     return this.usersService.getStores();

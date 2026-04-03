@@ -6,10 +6,24 @@ import {
   PackageSearch,
   Sparkles,
 } from 'lucide-react';
+import HomepageBannerCarousel from '@/components/homepage-banner-carousel';
+import { baseURL, getHomepageBanners } from '@/lib/api';
 
-export default function HomePage() {
+export default async function HomePage() {
+  let banners = [];
+
+  try {
+    banners = await getHomepageBanners();
+  } catch (error) {
+    console.error('Не удалось загрузить баннеры главной страницы', error);
+  }
+
   return (
     <div className="grid gap-8 lg:gap-10">
+      {banners.length > 0 ? (
+        <HomepageBannerCarousel banners={banners} apiBaseUrl={baseURL} />
+      ) : null}
+
       <section className="overflow-hidden rounded-[24px] border border-[#E5E7EB] bg-white p-6 md:p-8 lg:p-10">
         <div className="grid gap-10 lg:grid-cols-[1.12fr_0.88fr] lg:items-center">
           <div className="max-w-2xl">

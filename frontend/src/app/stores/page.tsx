@@ -12,10 +12,20 @@ type Store = {
 
 function normalizeImageSrc(src?: string | null) {
   if (!src) return null;
+
   const backendUrl =
     process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, '') || 'http://localhost:4000';
 
-  return src.startsWith('http') ? src : `${backendUrl}${src}`;
+  try {
+    if (src.startsWith('http://') || src.startsWith('https://')) {
+      const url = new URL(src);
+      return `${backendUrl}${url.pathname}`;
+    }
+
+    return `${backendUrl}${src.startsWith('/') ? src : `/${src}`}`;
+  } catch {
+    return `${backendUrl}${src.startsWith('/') ? src : `/${src}`}`;
+  }
 }
 
 async function getStores(): Promise<Store[]> {

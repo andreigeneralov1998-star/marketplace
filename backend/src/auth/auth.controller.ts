@@ -3,6 +3,7 @@ import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { ResetPasswordByIdentityDto } from './dto/reset-password-by-identity.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -22,5 +23,9 @@ export class AuthController {
   @Get('me')
   me(@Req() req: { user: { userId: string } }) {
     return this.authService.me(req.user.userId);
+  }
+  @Post('forgot-password')
+  resetPasswordByIdentity(@Body() dto: ResetPasswordByIdentityDto) {
+    return this.authService.resetPasswordByIdentity(dto);
   }
 }

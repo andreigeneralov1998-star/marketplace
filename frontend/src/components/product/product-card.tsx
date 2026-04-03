@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { ProductListItem } from '@/types';
+import AddToCartButton from '@/components/AddToCartButton';
 
 function getSellerDisplayName(seller?: {
   storeName?: string | null;
@@ -97,6 +98,14 @@ export function ProductCard({ product }: ProductCardProps) {
               </Link>
             )}
           </div>
+
+          <AddToCartButton
+            product={{
+              id: product.id,
+              slug: product.slug,
+              stock: product.stock,
+            }}
+          />
         </div>
       </div>
     </article>

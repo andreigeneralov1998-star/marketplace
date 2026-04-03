@@ -25,16 +25,19 @@ export default function SellerImportPage() {
     try {
       setError('');
 
-      const res = await api.get('/products/seller/csv-template', {
+      const res = await api.get('/products/seller/excel-template', {
         responseType: 'blob',
       });
 
-      const blob = new Blob([res.data], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob([res.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+
       const url = window.URL.createObjectURL(blob);
 
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', 'products-template.csv');
+      link.setAttribute('download', 'products-template.xlsx');
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -47,7 +50,7 @@ export default function SellerImportPage() {
 
   const handleSubmit = async () => {
     if (!file) {
-      setError('Выберите CSV-файл перед отправкой');
+      setError('Выберите Excel-файл перед отправкой');
       return;
     }
 
@@ -83,7 +86,7 @@ export default function SellerImportPage() {
               Загрузка товаров через Excel
             </h1>
             <p className="mt-2 text-sm leading-6 text-[#6B7280]">
-              Используйте CSV-шаблон для массового добавления товаров. После
+              Используйте Excel-шаблон для массового добавления товаров. После
               загрузки позиции создаются в системе и отправляются на модерацию.
               До подтверждения администратора товары не отображаются на сайте.
             </p>
@@ -116,7 +119,7 @@ export default function SellerImportPage() {
                   Шаг 1. Скачайте шаблон
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-[#6B7280]">
-                  Скачайте готовый CSV-файл с правильными заголовками полей,
+                  Скачайте готовый Excel-файл с правильными заголовками полей,
                   заполните его и затем загрузите обратно на сайт.
                 </p>
               </div>
@@ -137,7 +140,7 @@ export default function SellerImportPage() {
                 Шаг 2. Загрузите заполненный файл
               </h2>
               <p className="mt-2 text-sm leading-6 text-[#6B7280]">
-                Поддерживается CSV. Проверьте, чтобы обязательные поля были
+                Поддерживается Excel (.xlsx). Проверьте, чтобы обязательные поля были
                 заполнены корректно.
               </p>
             </div>
@@ -145,7 +148,7 @@ export default function SellerImportPage() {
             <div className="mt-6 rounded-2xl border border-dashed border-[#D1D5DB] bg-[#F9FAFB] p-6">
               <label className="flex cursor-pointer flex-col items-center justify-center text-center">
                 <div className="rounded-full bg-white px-4 py-2 text-sm font-medium text-[#374151] shadow-sm">
-                  Выбрать CSV-файл
+                  Выбрать Excel-файл
                 </div>
 
                 <p className="mt-4 text-sm text-[#6B7280]">
@@ -154,7 +157,7 @@ export default function SellerImportPage() {
 
                 <input
                   type="file"
-                  accept=".csv"
+                  accept=".xlsx"
                   onChange={(e) => setFile(e.target.files?.[0] || null)}
                   className="hidden"
                 />
@@ -273,7 +276,7 @@ export default function SellerImportPage() {
             <p className="mt-3 text-sm leading-6 text-[#6B7280]">
               Если часть строк заполнена с ошибками, система покажет, какие
               именно позиции не удалось обработать. Исправьте их в файле и
-              загрузите CSV повторно.
+              загрузите файл повторно.
             </p>
           </div>
         </aside>

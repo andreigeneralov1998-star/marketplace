@@ -1,9 +1,299 @@
 import { PrismaClient, OrderStatus } from '@prisma/client';
 import * as XLSX from 'xlsx';
 import path from 'path';
+import fs from 'fs';
+import express from 'express';
 
 
 const prisma = new PrismaClient();
+
+const formatDateTime = (value: unknown) => {
+  if (!value) return '';
+
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return String(value);
+
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+};
+
+const formatMoney = (value: unknown) => {
+  const amount = Number(value ?? 0);
+  if (Number.isNaN(amount)) return String(value ?? '');
+
+  return `${amount.toFixed(2)} BYN`;
+};
+
+const mapProductModerationStatus = (value: unknown) => {
+  const status = String(value ?? '');
+
+  if (status === 'APPROVED') return 'Одобрен';
+  if (status === 'PENDING') return 'На модерации';
+  if (status === 'REJECTED') return 'Отклонён';
+
+  return status;
+};
+
+const mapPublishedLabel = (value: unknown) => {
+  if (value === true || value === 'true') return 'Да';
+  if (value === false || value === 'false') return 'Нет';
+  return String(value ?? '');
+};
+
+const mapOrderStatus = (value: unknown) => {
+  const status = String(value ?? '');
+
+  if (status === 'PENDING') return 'Новый';
+  if (status === 'PAID') return 'Оплачен';
+  if (status === 'PROCESSING') return 'В обработке';
+  if (status === 'SHIPPED') return 'Отправлен';
+  if (status === 'DELIVERED') return 'Доставлен';
+  if (status === 'CANCELLED') return 'Отменён';
+
+  return status;
+};
+
+const mapDeliveryMethod = (value: unknown) => {
+  const method = String(value ?? '');
+
+  if (method === 'BELPOCHTA') return 'Белпочта';
+  if (method === 'EUROPOCHTA') return 'Европочта';
+  if (method === 'EMS') return 'EMS';
+  if (method === 'PICKUP') return 'Самовывоз';
+  if (method === 'TOPSET_CASH') return 'Наличными в TOPSET';
+  if (method === 'TOPSET_BALANCE') return 'На баланс TOPSET';
+
+  return method;
+};
+const ADMIN_BRANDING = {
+  companyName: 'Rynok.by — Админ-панель',
+  softwareBrothers: false,
+  withMadeWithLove: false,
+};
+
+const ruTranslations = {
+  
+  labels: {
+    loginWelcome: 'Вход в админ-панель',
+    navigation: 'Навигация',
+    pages: 'Страницы',
+    dashboard: 'Главная',
+    properties: 'Поля',
+  },
+
+  buttons: {
+    save: 'Сохранить',
+    addNewItem: 'Добавить',
+    filter: 'Фильтр',
+    applyChanges: 'Применить',
+    resetFilter: 'Сбросить',
+    confirmRemovalMany: 'Подтвердить',
+    confirmRemoval: 'Подтвердить',
+    delete: 'Удалить',
+    edit: 'Редактировать',
+    show: 'Открыть',
+    list: 'Список',
+    search: 'Поиск',
+    logout: 'Выйти',
+    login: 'Войти',
+    bulkDelete: 'Скрыть выбранное',
+  },
+  actions: {
+    new: 'Создать',
+    edit: 'Редактировать',
+    show: 'Просмотр',
+    delete: 'Скрыть',
+    list: 'Список',
+    search: 'Поиск',
+    bulkDelete: 'Скрыть выбранное',
+  },
+  messages: {
+    welcomeOnBoard_title: 'Добро пожаловать в админ-панель',
+    welcomeOnBoard_subtitle:
+      'Здесь вы можете управлять товарами, заказами, пользователями и выплатами.',
+
+    addingResources_title: 'Ресурсы',
+    addingResources_subtitle:
+      'Основные сущности проекта доступны через меню слева.',
+
+    customizeResources_title: 'Настройка ресурсов',
+    customizeResources_subtitle:
+      'Можно управлять полями, фильтрами и отображением данных.',
+
+    customizeActions_title: 'Действия',
+    customizeActions_subtitle:
+      'Одобрение, отклонение, скрытие и другие действия над записями.',
+
+    writeOwnComponents_title: 'Кастомные компоненты',
+    writeOwnComponents_subtitle:
+      'Позже можно добавить собственные интерфейсы и улучшения.',
+
+    customDashboard_title: 'Главная страница',
+    customDashboard_subtitle:
+      'При необходимости позже сделаем свою главную страницу.',
+
+    roleBasedAccess_title: 'Роли и доступы',
+    roleBasedAccess_subtitle:
+      'Доступ к действиям и разделам зависит от роли пользователя.',
+
+    successfullyBulkDeleted: 'Выбранные записи обработаны',
+    successfullyDeleted: 'Запись успешно обработана',
+    successfullyUpdated: 'Запись успешно обновлена',
+    successfullyCreated: 'Запись успешно создана',
+    deleteMessage: 'Вы действительно хотите выполнить это действие?',
+    bulkDeleteError: 'Не удалось обработать выбранные записи',
+    thereWereValidationErrors: 'Проверьте форму: есть ошибки в заполнении',
+    forbiddenError: 'У вас нет доступа к этому действию',
+  },
+  resources: {
+    HomepageBanner: {
+      name: 'Баннеры главной',
+      properties: {
+        title: 'Название',
+        imageUrl: 'Изображение',
+        imageUpload: 'Изображение',
+        linkUrl: 'Ссылка',
+        sortOrder: 'Порядок',
+        isActive: 'Активен',
+        openInNewTab: 'Открывать в новой вкладке',
+        createdAt: 'Создан',
+        updatedAt: 'Обновлен',
+      },
+    },
+    SellerWithdrawalRequest: {
+      name: 'Заявки на вывод',
+      properties: {
+        requestNumber: 'Номер заявки',
+        sellerId: 'Продавец',
+        amount: 'Сумма',
+        amountFormatted: 'Сумма',
+        method: 'Способ вывода',
+        methodLabel: 'Способ вывода',
+        status: 'Статус',
+        topsetAccountName: 'Учетная запись TOPSET',
+        pickupLocation: 'Магазин TOPSET',
+        comment: 'Комментарий',
+        processedAt: 'Дата обработки',
+        processedByAdminId: 'Обработал администратор',
+        createdAt: 'Создано',
+        updatedAt: 'Обновлено',
+      },
+    },
+    User: {
+      name: 'Пользователи',
+      properties: {
+        email: 'Email',
+        role: 'Роль',
+        firstName: 'Имя',
+        lastName: 'Фамилия',
+        phone: 'Телефон',
+        storeName: 'Название магазина',
+        storeSlug: 'Слаг магазина',
+        storeDescription: 'Описание магазина',
+        storeLogo: 'Логотип магазина',
+        isSellerApproved: 'Продавец одобрен',
+        createdAt: 'Создан',
+        updatedAt: 'Обновлен',
+      },
+    },  
+    SellerApplication: {
+      name: 'Заявки в продавцы',
+      properties: {
+        userId: 'Пользователь',
+        status: 'Статус',
+        lastName: 'Фамилия',
+        firstName: 'Имя',
+        middleName: 'Отчество',
+        phone: 'Телефон',
+        city: 'Город',
+        warehouseAddress: 'Адрес склада',
+        storeName: 'Название магазина',
+        storeSlug: 'Слаг магазина',
+        storeDescription: 'Описание магазина',
+        storeLogo: 'Логотип магазина',
+        createdAt: 'Создано',
+        updatedAt: 'Обновлено',
+      },
+    },
+
+    Category: {
+      name: 'Категории',
+      properties: {
+        name: 'Название',
+        slug: 'Слаг',
+        createdAt: 'Создана',
+        updatedAt: 'Обновлена',
+      },
+    },
+    Product: {
+      name: 'Товары',
+      properties: {
+        title: 'Название',
+        slug: 'Слаг',
+        sku: 'Артикул',
+        description: 'Описание',
+        price: 'Цена',
+        stock: 'Остаток',
+        categoryId: 'Категория',
+        sellerId: 'Продавец',
+        imageUrl: 'Главное фото',
+        moderationStatus: 'Статус модерации',
+        moderationComment: 'Комментарий модератора',
+        compatibleModels: 'Совместимые модели',
+        isPublished: 'Опубликован',
+        createdAt: 'Создан',
+        updatedAt: 'Обновлен',
+      },
+    },
+    ProductImage: {
+      name: 'Изображения товаров',
+      properties: {
+        productId: 'Товар',
+        url: 'Изображение',
+        position: 'Позиция',
+        createdAt: 'Создано',
+      },
+    },
+    Order: {
+      name: 'Заказы',
+      properties: {
+        orderNumber: 'Номер заказа',
+        id: 'ID',
+        createdAt: 'Создан',
+        sellerId: 'Продавец',
+        userId: 'Покупатель',
+        fullName: 'ФИО',
+        phone: 'Телефон',
+        deliveryMethod: 'Доставка',
+        city: 'Город',
+        street: 'Улица',
+        house: 'Дом',
+        apartment: 'Квартира',
+        comment: 'Комментарий',
+        total: 'Сумма',
+        status: 'Статус',
+      },
+    },
+    OrderItem: {
+      name: 'Позиции заказа',
+      properties: {
+        id: 'ID',
+        orderId: 'Заказ',
+        productId: 'Товар',
+        sellerId: 'Продавец',
+        titleSnapshot: 'Название',
+        skuSnapshot: 'Артикул',
+        priceSnapshot: 'Цена',
+        quantity: 'Количество',
+      },
+    },
+  },
+};
 
 
 // Важно: TS не должен превращать это в require()
@@ -42,21 +332,34 @@ export async function buildAdminRouter() {
 
   const exportExcelComponent = componentLoader.add(
     'ExportExcel',
-    path.join(__dirname, 'admin', 'components', 'export-excel'),
+    './admin/components/export-excel',
+    'buildAdminRouter',
   );
+
+  const bannerImageUploadComponent = componentLoader.add(
+    'BannerImageUploadV2',
+    './admin/components/banner-image-upload',
+    'buildAdminRouter',
+  );
+
   const admin = new AdminJS({
     rootPath: '/admin',
+    componentLoader,
     resources: [
       {
         resource: { model: getModelByName('SellerWithdrawalRequest'), client: prisma },
         options: {
+          navigation: {
+            name: 'Финансы',
+            icon: 'Payment',
+          },
           listProperties: [
-            'id',
-            'createdAt',
+            'requestNumber',
+            'createdAtFormatted',
             'sellerId',
             'amountFormatted',
             'methodLabel',
-            'status',
+            'statusLabel',
           ],
           filterProperties: [
             'sellerId',
@@ -65,23 +368,46 @@ export async function buildAdminRouter() {
             'createdAt',
           ],
           showProperties: [
-            'id',
+            'requestNumber',
             'sellerId',
             'amountFormatted',
             'methodLabel',
-            'status',
+            'statusLabel',
             'topsetAccountName',
             'pickupLocation',
             'comment',
-            'processedAt',
+            'processedAtFormatted',
             'processedByAdminId',
-            'createdAt',
-            'updatedAt',
+            'createdAtFormatted',
+            'updatedAtFormatted',
           ],
           editProperties: [],
           properties: {
+            requestNumber: {
+              label: 'Номер заявки',
+              isVisible: { list: true, show: true, filter: true, edit: false },
+            },
+            id: {
+              isVisible: false,
+            },
+            statusLabel: {
+              label: 'Статус',
+              isVisible: { list: true, show: true, filter: false, edit: false },
+            },
+            createdAtFormatted: {
+              label: 'Создано',
+              isVisible: { list: true, show: true, filter: false, edit: false },
+            },
+            processedAtFormatted: {
+              label: 'Дата обработки',
+              isVisible: { list: false, show: true, filter: false, edit: false },
+            },
+            updatedAtFormatted: {
+              label: 'Обновлено',
+              isVisible: { list: false, show: true, filter: false, edit: false },
+            },
             sellerId: {
-              label: 'Seller',
+              label: 'Продавец',
             },
             amount: {
               label: 'Сумма',
@@ -123,6 +449,7 @@ export async function buildAdminRouter() {
                   response.records = response.records.map((record) => {
                     const amountInCents = Number(record.params.amount ?? 0);
                     const method = String(record.params.method ?? '');
+                    const status = String(record.params.status ?? '');
 
                     record.params.amountFormatted = `${(amountInCents / 100).toFixed(2)} BYN`;
                     record.params.methodLabel =
@@ -131,6 +458,19 @@ export async function buildAdminRouter() {
                         : method === 'TOPSET_CASH'
                         ? 'Наличными в TOPSET'
                         : method;
+
+                    record.params.statusLabel =
+                      status === 'PENDING'
+                        ? 'Ожидает'
+                        : status === 'APPROVED'
+                        ? 'Подтверждена'
+                        : status === 'REJECTED'
+                        ? 'Отклонена'
+                        : status;
+
+                    record.params.createdAtFormatted = formatDateTime(record.params.createdAt);
+                    record.params.processedAtFormatted = formatDateTime(record.params.processedAt);
+                    record.params.updatedAtFormatted = formatDateTime(record.params.updatedAt);
 
                     return record;
                   });
@@ -145,6 +485,7 @@ export async function buildAdminRouter() {
                 if (response.record) {
                   const amountInCents = Number(response.record.params.amount ?? 0);
                   const method = String(response.record.params.method ?? '');
+                  const status = String(response.record.params.status ?? '');
 
                   response.record.params.amountFormatted = `${(amountInCents / 100).toFixed(2)} BYN`;
                   response.record.params.methodLabel =
@@ -153,6 +494,25 @@ export async function buildAdminRouter() {
                       : method === 'TOPSET_CASH'
                       ? 'Наличными в TOPSET'
                       : method;
+
+                  response.record.params.statusLabel =
+                    status === 'PENDING'
+                      ? 'Ожидает'
+                      : status === 'APPROVED'
+                      ? 'Подтверждена'
+                      : status === 'REJECTED'
+                      ? 'Отклонена'
+                      : status;
+
+                  response.record.params.createdAtFormatted = formatDateTime(
+                    response.record.params.createdAt,
+                  );
+                  response.record.params.processedAtFormatted = formatDateTime(
+                    response.record.params.processedAt,
+                  );
+                  response.record.params.updatedAtFormatted = formatDateTime(
+                    response.record.params.updatedAt,
+                  );
                 }
 
                 return response;
@@ -424,14 +784,450 @@ export async function buildAdminRouter() {
       },
       {
         resource: { model: getModelByName('User'), client: prisma },
+        options: {
+          label: 'Пользователи',
+          properties: {
+            email: { label: 'Email' },
+            role: { label: 'Роль' },
+            storeName: { label: 'Магазин' },
+            isSellerApproved: { label: 'Одобрен продавец' },
+            createdAt: { label: 'Создан' },
+          },
+          actions: {
+            new: { label: 'Создать' },
+            edit: { label: 'Редактировать' },
+            show: { label: 'Просмотр' },
+            delete: { label: 'Удалить' },
+          },
+          navigation: {
+            name: 'Пользователи и магазины',
+            icon: 'User',
+          },
+          listProperties: ['email', 'role', 'storeName', 'isSellerApproved', 'createdAt'],
+          filterProperties: ['email', 'role', 'storeName', 'isSellerApproved', 'createdAt'],
+        },
       },
+        {
+          resource: { model: getModelByName('SellerApplication'), client: prisma },
+          options: {
+            label: 'Заявки в продавцы',
+            navigation: {
+              name: 'Пользователи и магазины',
+              icon: 'User',
+            },
+            listProperties: [
+              'userId',
+              'status',
+              'lastName',
+              'firstName',
+              'phone',
+              'storeName',
+              'createdAt',
+            ],
+            filterProperties: [
+              'status',
+              'userId',
+              'phone',
+              'storeName',
+              'createdAt',
+            ],
+            showProperties: [
+              'id',
+              'userId',
+              'status',
+              'lastName',
+              'firstName',
+              'middleName',
+              'phone',
+              'city',
+              'warehouseAddress',
+              'storeName',
+              'storeSlug',
+              'storeDescription',
+              'storeLogo',
+              'createdAt',
+              'updatedAt',
+            ],
+            editProperties: [],
+            properties: {
+              id: { label: 'ID' },
+              userId: { label: 'Пользователь' },
+              status: { label: 'Статус' },
+              lastName: { label: 'Фамилия' },
+              firstName: { label: 'Имя' },
+              middleName: { label: 'Отчество' },
+              phone: { label: 'Телефон' },
+              city: { label: 'Город' },
+              warehouseAddress: { label: 'Адрес склада' },
+              storeName: { label: 'Название магазина' },
+              storeSlug: { label: 'Слаг магазина' },
+              storeDescription: { label: 'Описание магазина' },
+              storeLogo: { label: 'Логотип магазина' },
+              createdAt: { label: 'Создано' },
+              updatedAt: { label: 'Обновлено' },
+            },
+            actions: {
+              new: { isAccessible: false },
+              edit: { isAccessible: false },
+              delete: { isAccessible: false },
+
+              approveSellerApplication: {
+                actionType: 'record',
+                label: 'Одобрить',
+                icon: 'Checkmark',
+                component: false,
+                guard: 'Одобрить заявку и перевести пользователя в Seller?',
+                isAccessible: ({ record, currentAdmin }) =>
+                  currentAdmin?.role === 'ADMIN' && record?.params?.status === 'PENDING',
+                handler: async (_request, _response, context) => {
+                  const { record, resource, currentAdmin } = context;
+
+                  if (!record) {
+                    return {
+                      notice: {
+                        message: 'Заявка не найдена',
+                        type: 'error',
+                      },
+                    };
+                  }
+
+                  const applicationId = Number(record.params.id);
+
+                  const application = await prisma.sellerApplication.findUnique({
+                    where: { id: applicationId },
+                  });
+
+                  if (!application) {
+                    return {
+                      notice: {
+                        message: 'Заявка не найдена',
+                        type: 'error',
+                      },
+                    };
+                  }
+
+                  if (application.status !== 'PENDING') {
+                    return {
+                      notice: {
+                        message: 'Заявка уже обработана',
+                        type: 'error',
+                      },
+                    };
+                  }
+
+                  await prisma.$transaction(async (tx) => {
+                    await tx.sellerApplication.update({
+                      where: { id: applicationId },
+                      data: {
+                        status: 'APPROVED',
+                      },
+                    });
+
+                    await tx.user.update({
+                      where: { id: application.userId },
+                      data: {
+                        role: 'SELLER',
+                        isSellerApproved: true,
+                        lastName: application.lastName,
+                        firstName: application.firstName,
+                        middleName: application.middleName,
+                        phone: application.phone,
+                        city: application.city,
+                        warehouseAddress: application.warehouseAddress,
+                        storeName: application.storeName,
+                        storeSlug: application.storeSlug,
+                        storeDescription: application.storeDescription,
+                        storeLogo: application.storeLogo,
+                        isProfileComplete: true,
+                      },
+                    });
+                  });
+
+                  const updatedRecord = await resource.findOne(String(applicationId));
+
+                  return {
+                    record: updatedRecord?.toJSON(currentAdmin),
+                    notice: {
+                      message: 'Заявка одобрена. Пользователь стал продавцом.',
+                      type: 'success',
+                    },
+                  };
+                },
+              },
+
+              rejectSellerApplication: {
+                actionType: 'record',
+                label: 'Отклонить',
+                icon: 'Close',
+                component: false,
+                guard: 'Отклонить заявку?',
+                isAccessible: ({ record, currentAdmin }) =>
+                  currentAdmin?.role === 'ADMIN' && record?.params?.status === 'PENDING',
+                handler: async (_request, _response, context) => {
+                  const { record, resource, currentAdmin } = context;
+
+                  if (!record) {
+                    return {
+                      notice: {
+                        message: 'Заявка не найдена',
+                        type: 'error',
+                      },
+                    };
+                  }
+
+                  const applicationId = Number(record.params.id);
+
+                  await prisma.sellerApplication.update({
+                    where: { id: applicationId },
+                    data: {
+                      status: 'REJECTED',
+                    },
+                  });
+
+                  const updatedRecord = await resource.findOne(String(applicationId));
+
+                  return {
+                    record: updatedRecord?.toJSON(currentAdmin),
+                    notice: {
+                      message: 'Заявка отклонена',
+                      type: 'success',
+                    },
+                  };
+                },
+              },
+            },
+          },
+        },
       {
         resource: { model: getModelByName('Category'), client: prisma },
+        options: {
+          label: 'Категории',
+          navigation: {
+            name: 'Каталог',
+            icon: 'Category',
+          },
+          listProperties: ['name', 'slug', 'createdAt'],
+          filterProperties: ['name', 'slug', 'createdAt'],
+          showProperties: ['id', 'name', 'slug', 'createdAt', 'updatedAt'],
+          editProperties: ['name', 'slug'],
+          properties: {
+            name: { label: 'Название' },
+            slug: { label: 'Слаг' },
+            createdAt: { label: 'Создана' },
+            updatedAt: { label: 'Обновлена' },
+          },
+        },
+      },
+      {
+        resource: { model: getModelByName('HomepageBanner'), client: prisma },
+        options: {
+          label: 'Баннеры главной',
+          navigation: {
+            name: 'Маркетинг',
+            icon: 'Image',
+          },
+          listProperties: [
+            'title',
+            'imageUrl',
+            'linkUrl',
+            'sortOrder',
+            'isActive',
+            'openInNewTab',
+            'createdAt',
+          ],
+          filterProperties: [
+            'title',
+            'linkUrl',
+            'isActive',
+            'openInNewTab',
+            'createdAt',
+          ],
+          showProperties: [
+            'id',
+            'title',
+            'imageUrl',
+            'linkUrl',
+            'sortOrder',
+            'isActive',
+            'openInNewTab',
+            'createdAt',
+            'updatedAt',
+          ],
+          editProperties: [
+            'title',
+            'imageUpload',
+            'linkUrl',
+            'sortOrder',
+            'isActive',
+            'openInNewTab',
+          ],
+
+          properties: {
+            id: {
+              isVisible: { list: false, filter: false, show: true, edit: false },
+            },
+
+            title: {
+              label: 'Название',
+            },
+
+            imageUrl: {
+              label: 'Изображение',
+              isVisible: {
+                list: true,
+                filter: false,
+                show: true,
+                edit: false,
+              },
+            },
+
+            imageUpload: {
+              label: 'Изображение',
+              type: 'string',
+              isVisible: {
+                list: false,
+                filter: false,
+                show: false,
+                edit: true,
+              },
+              components: {
+                edit: bannerImageUploadComponent,
+                new: bannerImageUploadComponent,
+              },
+            },
+
+            linkUrl: {
+              label: 'Ссылка',
+            },
+
+            sortOrder: {
+              label: 'Порядок',
+            },
+
+            isActive: {
+              label: 'Активен',
+            },
+
+            openInNewTab: {
+              label: 'Открывать в новой вкладке',
+            },
+
+            createdAt: {
+              label: 'Создан',
+              isVisible: { list: true, filter: true, show: true, edit: false },
+            },
+
+            updatedAt: {
+              label: 'Обновлен',
+              isVisible: { list: false, filter: false, show: true, edit: false },
+            },
+          },
+          actions: {
+            new: {
+              label: 'Создать',
+              before: async (request) => {
+                if (request.method !== 'post') return request;
+
+                const payload = request.payload ?? {};
+                let imageUrl =
+                  typeof payload.imageUrl === 'string' ? payload.imageUrl.trim() : '';
+
+                if (typeof payload.imageUpload === 'string' && payload.imageUpload.startsWith('data:image/')) {
+                  imageUrl = saveHomepageBannerFromDataUrl(payload.imageUpload);
+                }
+
+                request.payload = {
+                  ...payload,
+                  imageUrl,
+                };
+
+                delete request.payload.imageUpload;
+
+                return request;
+              },
+            },
+
+            edit: {
+              label: 'Редактировать',
+              before: async (request) => {
+                if (request.method !== 'post') return request;
+
+                const payload = request.payload ?? {};
+                let imageUrl =
+                  typeof payload.imageUrl === 'string' ? payload.imageUrl.trim() : '';
+
+                if (typeof payload.imageUpload === 'string' && payload.imageUpload.startsWith('data:image/')) {
+                  imageUrl = saveHomepageBannerFromDataUrl(payload.imageUpload);
+                }
+
+                request.payload = {
+                  ...payload,
+                  imageUrl,
+                };
+
+                delete request.payload.imageUpload;
+
+                return request;
+              },
+            },
+
+            show: { label: 'Просмотр' },
+            delete: { label: 'Удалить' },
+          },
+          sort: {
+            sortBy: 'sortOrder',
+            direction: 'asc',
+          },
+        },
       },
       {
         resource: { model: getModelByName('Product'), client: prisma },
         options: {
+          label: 'Товары',
+          navigation: {
+            name: 'Каталог',
+            icon: 'Catalog',
+          },
+          listProperties: [
+            'title',
+            'sku',
+            'priceFormatted',
+            'stock',
+            'moderationStatusLabel',
+            'isPublishedLabel',
+            'createdAtFormatted',
+          ],
+          filterProperties: [
+            'title',
+            'sku',
+            'moderationStatus',
+            'isPublished',
+            'createdAt',
+          ],
+          showProperties: [
+            'id',
+            'title',
+            'slug',
+            'sku',
+            'description',
+            'priceFormatted',
+            'stock',
+            'compatibleModels',
+            'moderationStatusLabel',
+            'moderationComment',
+            'isPublishedLabel',
+            'createdAtFormatted',
+            'updatedAtFormatted',
+          ],
           properties: {
+            title: { label: 'Название' },
+            slug: { label: 'Слаг' },
+            sku: { label: 'Артикул' },
+            description: { label: 'Описание' },
+            price: { label: 'Цена' },
+            stock: { label: 'Остаток' },
+            createdAt: { label: 'Создан' },
+            updatedAt: { label: 'Обновлен' },
             imageUrl: { isVisible: false },
             moderationStatus: {
               label: 'Статус модерации',
@@ -449,8 +1245,75 @@ export async function buildAdminRouter() {
               label: 'Опубликован',
               isVisible: { list: true, filter: true, show: true, edit: true },
             },
+            priceFormatted: {
+              label: 'Цена',
+              isVisible: { list: true, show: true, filter: false, edit: false },
+            },
+            moderationStatusLabel: {
+              label: 'Статус модерации',
+              isVisible: { list: true, show: true, filter: false, edit: false },
+            },
+            isPublishedLabel: {
+              label: 'Опубликован',
+              isVisible: { list: true, show: true, filter: false, edit: false },
+            },
+            createdAtFormatted: {
+              label: 'Создан',
+              isVisible: { list: true, show: true, filter: false, edit: false },
+            },
+            updatedAtFormatted: {
+              label: 'Обновлен',
+              isVisible: { list: false, show: true, filter: false, edit: false },
+            },
           },
           actions: {
+            list: {
+              after: async (response) => {
+                if (response.records) {
+                  response.records = response.records.map((record) => {
+                    record.params.priceFormatted = formatMoney(record.params.price);
+                    record.params.moderationStatusLabel = mapProductModerationStatus(
+                      record.params.moderationStatus,
+                    );
+                    record.params.isPublishedLabel = mapPublishedLabel(
+                      record.params.isPublished,
+                    );
+                    record.params.createdAtFormatted = formatDateTime(record.params.createdAt);
+                    record.params.updatedAtFormatted = formatDateTime(record.params.updatedAt);
+                    return record;
+                  });
+                }
+
+                return response;
+              },
+            },
+
+            show: {
+              label: 'Просмотр',
+              after: async (response) => {
+                if (response.record) {
+                  response.record.params.priceFormatted = formatMoney(
+                    response.record.params.price,
+                  );
+                  response.record.params.moderationStatusLabel = mapProductModerationStatus(
+                    response.record.params.moderationStatus,
+                  );
+                  response.record.params.isPublishedLabel = mapPublishedLabel(
+                    response.record.params.isPublished,
+                  );
+                  response.record.params.createdAtFormatted = formatDateTime(
+                    response.record.params.createdAt,
+                  );
+                  response.record.params.updatedAtFormatted = formatDateTime(
+                    response.record.params.updatedAt,
+                  );
+                }
+
+                return response;
+              },
+            },
+            new: { isAccessible: false },
+            edit: { label: 'Редактировать' },
             exportExcel: {
               actionType: 'resource',
               label: 'Экспорт в Excel',
@@ -498,7 +1361,7 @@ export async function buildAdminRouter() {
                 };
               },
             },
-
+            
             reject: {
               actionType: 'record',
               label: 'Отклонить',
@@ -605,73 +1468,175 @@ export async function buildAdminRouter() {
       },
       {
         resource: { model: getModelByName('ProductImage'), client: prisma },
+        options: {
+          label: 'Изображения товаров',
+          navigation: {
+            name: 'Каталог',
+            icon: 'Catalog',
+          },
+          properties: {
+            productId: { label: 'Товар' },
+            url: { label: 'Файл' },
+            position: { label: 'Позиция' },
+            createdAt: { label: 'Создано' },
+          },
+        },
       },
       {
         resource: { model: getModelByName('Order'), client: prisma },
         options: {
+          label: 'Заказы',
+          navigation: {
+            name: 'Заказы',
+            icon: 'ShoppingCart',
+          },
           listProperties: [
-            'id',
-            'createdAt',
-            'sellerId',
-            'userId',
-            'total',
-            'status',
+            'orderNumber',
+            'createdAtFormatted',
+            'fullName',
+            'phone',
+            'deliveryMethodLabel',
+            'totalFormatted',
+            'statusLabel',
           ],
           filterProperties: [
-            'id',
             'createdAt',
-            'sellerId',
-            'userId',
-            'status',
-          ],
-          showProperties: [
-            'id',
-            'createdAt',
-            'sellerId',
-            'userId',
             'fullName',
             'phone',
             'deliveryMethod',
+            'status',
+          ],
+          showProperties: [
+            'orderNumber',
+            'createdAtFormatted',
+            'fullName',
+            'phone',
+            'deliveryMethodLabel',
             'city',
             'street',
             'house',
             'apartment',
             'comment',
-            'total',
-            'status',
+            'totalFormatted',
+            'statusLabel',
           ],
           editProperties: [],
           properties: {
-            id: {
+            orderNumber: {
+              label: 'Номер заказа',
               isVisible: { list: true, filter: true, show: true, edit: false },
+            },
+            id: {
+              isVisible: false,
             },
             createdAt: {
+              label: 'Дата',
+              isVisible: { list: false, filter: true, show: false, edit: false },
+            },
+            createdAtFormatted: {
+              label: 'Дата',
+              isVisible: { list: true, filter: false, show: true, edit: false },
+            },
+            fullName: {
+              label: 'ФИО',
               isVisible: { list: true, filter: true, show: true, edit: false },
             },
-            sellerId: {
-              label: 'Seller',
+            phone: {
+              label: 'Телефон',
               isVisible: { list: true, filter: true, show: true, edit: false },
             },
-            userId: {
-              label: 'Пользователь',
-              isVisible: { list: true, filter: true, show: true, edit: false },
+            deliveryMethod: {
+              label: 'Доставка',
+              isVisible: { list: false, filter: true, show: false, edit: false },
+            },
+            deliveryMethodLabel: {
+              label: 'Доставка',
+              isVisible: { list: true, filter: false, show: true, edit: false },
+            },
+            city: {
+              label: 'Город',
+              isVisible: { list: false, filter: false, show: true, edit: false },
+            },
+            street: {
+              label: 'Улица',
+              isVisible: { list: false, filter: false, show: true, edit: false },
+            },
+            house: {
+              label: 'Дом',
+              isVisible: { list: false, filter: false, show: true, edit: false },
+            },
+            apartment: {
+              label: 'Квартира',
+              isVisible: { list: false, filter: false, show: true, edit: false },
+            },
+            comment: {
+              label: 'Комментарий',
+              isVisible: { list: false, filter: false, show: true, edit: false },
             },
             total: {
+              label: 'Сумма',
+              isVisible: { list: false, filter: false, show: false, edit: false },
+            },
+            totalFormatted: {
               label: 'Сумма',
               isVisible: { list: true, filter: false, show: true, edit: false },
             },
             status: {
               label: 'Статус',
-              isVisible: { list: true, filter: true, show: true, edit: false },
+              isVisible: { list: false, filter: true, show: false, edit: false },
+            },
+            statusLabel: {
+              label: 'Статус',
+              isVisible: { list: true, filter: false, show: true, edit: false },
             },
           },
           actions: {
+            list: {
+              label: 'Список',
+              after: async (response) => {
+                if (response.records) {
+                  response.records = response.records.map((record) => {
+                    record.params.createdAtFormatted = formatDateTime(record.params.createdAt);
+                    record.params.deliveryMethodLabel = mapDeliveryMethod(
+                      record.params.deliveryMethod,
+                    );
+                    record.params.totalFormatted = formatMoney(record.params.total);
+                    record.params.statusLabel = mapOrderStatus(record.params.status);
+                    return record;
+                  });
+                }
+
+                return response;
+              },
+            },
+            show: {
+              label: 'Просмотр',
+              after: async (response) => {
+                if (response.record) {
+                  response.record.params.createdAtFormatted = formatDateTime(
+                    response.record.params.createdAt,
+                  );
+                  response.record.params.deliveryMethodLabel = mapDeliveryMethod(
+                    response.record.params.deliveryMethod,
+                  );
+                  response.record.params.totalFormatted = formatMoney(
+                    response.record.params.total,
+                  );
+                  response.record.params.statusLabel = mapOrderStatus(
+                    response.record.params.status,
+                  );
+                }
+
+                return response;
+              },
+            },
+            
             edit: { isAccessible: false },
             new: { isAccessible: false },
             delete: { isAccessible: false },
             markAsPaid: {
               actionType: 'record',
-              label: 'Оплачен',
+              label: 'Отметить оплаченным',
               icon: 'Checkmark',
               component: false,
               guard: 'Подтвердить оплату заказа?',
@@ -723,12 +1688,15 @@ export async function buildAdminRouter() {
       {
         resource: { model: getModelByName('OrderItem'), client: prisma },
         options: {
+          label: 'Позиции заказа',
+          navigation: {
+            name: 'Заказы',
+            icon: 'ShoppingCart',
+          },
           listProperties: [
-            'id',
-            'sellerId',
             'titleSnapshot',
             'skuSnapshot',
-            'priceSnapshot',
+            'priceSnapshotFormatted',
             'quantity',
             'orderId',
           ],
@@ -745,37 +1713,74 @@ export async function buildAdminRouter() {
             'sellerId',
             'titleSnapshot',
             'skuSnapshot',
-            'priceSnapshot',
+            'priceSnapshotFormatted',
             'quantity',
           ],
           editProperties: [],
           properties: {
+            priceSnapshotFormatted: {
+              label: 'Цена',
+              isVisible: { list: true, show: true, filter: false, edit: false },
+            },
             id: {
+              label: 'ID',
               isVisible: { list: true, filter: true, show: true, edit: false },
             },
             orderId: {
+              label: 'Заказ',
               isVisible: { list: true, filter: true, show: true, edit: false },
             },
             productId: {
+              label: 'Товар',
               isVisible: { list: false, filter: false, show: true, edit: false },
             },
             sellerId: {
+              label: 'Продавец',
               isVisible: { list: true, filter: true, show: true, edit: false },
             },
             titleSnapshot: {
+              label: 'Название',
               isVisible: { list: true, filter: true, show: true, edit: false },
             },
             skuSnapshot: {
+              label: 'Артикул',
               isVisible: { list: true, filter: true, show: true, edit: false },
             },
             priceSnapshot: {
+              label: 'Цена',
               isVisible: { list: true, filter: false, show: true, edit: false },
             },
             quantity: {
+              label: 'Количество',
               isVisible: { list: true, filter: false, show: true, edit: false },
             },
           },
           actions: {
+            list: {
+              after: async (response) => {
+                if (response.records) {
+                  response.records = response.records.map((record) => {
+                    record.params.priceSnapshotFormatted = formatMoney(
+                      record.params.priceSnapshot,
+                    );
+                    return record;
+                  });
+                }
+
+                return response;
+              },
+            },
+            show: {
+              after: async (response) => {
+                if (response.record) {
+                  response.record.params.priceSnapshotFormatted = formatMoney(
+                    response.record.params.priceSnapshot,
+                  );
+                }
+
+                return response;
+              },
+            },
             edit: { isAccessible: false },
             new: { isAccessible: false },
             delete: { isAccessible: false },
@@ -783,9 +1788,11 @@ export async function buildAdminRouter() {
         },
       },
     ],
-    branding: {
-      companyName: 'Marketplace Admin',
+    locale: {
+      language: 'ru',
+      translations: ruTranslations,
     },
+    branding: ADMIN_BRANDING,
   });
 
   const adminRouter = AdminJSExpress.buildAuthenticatedRouter(
@@ -824,6 +1831,8 @@ export async function buildAdminRouter() {
       saveUninitialized: false,
     },
   );
+
+  
   adminRouter.get('/export/products', async (req, res) => {
     const products = await prisma.product.findMany({
       include: {
@@ -877,6 +1886,129 @@ export async function buildAdminRouter() {
 
     res.end(buffer);
   });
+  const homepageBannerUploadDir = path.join(process.cwd(), 'uploads', 'homepage-banners');
+  const saveHomepageBannerFromDataUrl = (dataUrl: string) => {
+    const match = String(dataUrl).match(/^data:(.+);base64,(.+)$/);
 
+    if (!match) {
+      throw new Error('Некорректный формат изображения');
+    }
+
+    const [, mimeType, base64Data] = match;
+
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedMimeTypes.includes(mimeType)) {
+      throw new Error('Разрешены только JPG, PNG, WEBP');
+    }
+
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    const maxSize = 8 * 1024 * 1024;
+    if (buffer.length > maxSize) {
+      throw new Error('Файл слишком большой. Максимум 8 МБ');
+    }
+
+    const extension =
+      mimeType === 'image/png'
+        ? '.png'
+        : mimeType === 'image/webp'
+        ? '.webp'
+        : '.jpg';
+
+    const storedFileName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${extension}`;
+    const storedFilePath = path.join(homepageBannerUploadDir, storedFileName);
+
+    fs.writeFileSync(storedFilePath, buffer);
+
+    return `/uploads/homepage-banners/${storedFileName}`;
+  };
+
+  if (!fs.existsSync(homepageBannerUploadDir)) {
+    fs.mkdirSync(homepageBannerUploadDir, { recursive: true });
+  }
+
+  adminRouter.post(
+    '/upload/homepage-banner',
+    express.json({ limit: '10mb' }),
+    async (req: any, res: any) => {
+      try {
+        if (!req.session?.adminUser) {
+          return res.status(401).json({
+            message: 'Не авторизован в админ-панели',
+          });
+        }
+
+        console.log('UPLOAD ROUTE DEBUG content-type:', req.headers['content-type']);
+        console.log('UPLOAD ROUTE DEBUG body:', req.body);
+
+        const { filename, mimeType, dataUrl } = req.body ?? {};
+
+        const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
+
+        if (!filename || !mimeType || !dataUrl) {
+          return res.status(400).json({
+            message: `Пустые поля: filename=${Boolean(filename)}, mimeType=${Boolean(mimeType)}, dataUrl=${Boolean(dataUrl)}`,
+          });
+        }
+
+        if (!allowedMimeTypes.includes(String(mimeType))) {
+          return res.status(400).json({
+            message: 'Разрешены только JPG, PNG, WEBP',
+          });
+        }
+
+        const match = String(dataUrl).match(/^data:(.+);base64,(.+)$/);
+
+        if (!match) {
+          return res.status(400).json({
+            message: 'Некорректный формат файла',
+          });
+        }
+
+        const [, parsedMimeType, base64Data] = match;
+
+        if (parsedMimeType !== mimeType) {
+          return res.status(400).json({
+            message: 'Некорректный MIME-тип файла',
+          });
+        }
+
+        const buffer = Buffer.from(base64Data, 'base64');
+
+        const maxSize = 8 * 1024 * 1024;
+        if (buffer.length > maxSize) {
+          return res.status(400).json({
+            message: 'Файл слишком большой. Максимум 8 МБ',
+          });
+        }
+
+        const extension =
+          mimeType === 'image/png'
+            ? '.png'
+            : mimeType === 'image/webp'
+            ? '.webp'
+            : '.jpg';
+
+        const storedFileName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${extension}`;
+        const storedFilePath = path.join(homepageBannerUploadDir, storedFileName);
+
+        fs.writeFileSync(storedFilePath, buffer);
+
+        console.log('BANNER FILE SAVED:', {
+          storedFilePath,
+          publicUrl: `/uploads/homepage-banners/${storedFileName}`,
+          size: buffer.length,
+        });
+
+        return res.json({
+          url: `/uploads/homepage-banners/${storedFileName}`,
+        });
+      } catch (error: any) {
+        return res.status(400).json({
+          message: error?.message || 'Ошибка загрузки файла',
+        });
+      }
+    },
+  );
   return { admin, adminRouter };
 }

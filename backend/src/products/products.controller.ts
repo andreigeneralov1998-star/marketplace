@@ -44,29 +44,37 @@ export class ProductsController {
     return this.productsService.findAll(query);
   }
 
+  @Get('category-counts')
+  getCategoryCounts(@Query() query: QueryProductsDto) {
+    return this.productsService.getCategoryCounts(query);
+  }
+
   @Get('seller/my')
   @UseGuards(JwtAuthGuard)
   sellerProducts(@Req() req: { user: { userId: string } }) {
     return this.productsService.findSellerProducts(req.user.userId);
   }
-  @Get('seller/csv-template')
+  @Get('seller/excel-template')
   @UseGuards(JwtAuthGuard)
-  downloadSellerCsvTemplate(@Res() res: Response) {
-    const csv = this.productsService.getSellerCsvTemplate();
+  async downloadSellerExcelTemplate(@Res() res: Response) {
+    const fileBuffer = await this.productsService.getSellerExcelTemplate();
 
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
     res.setHeader(
       'Content-Disposition',
-      'attachment; filename="products-template.csv"',
+      'attachment; filename="products-template.xlsx"',
     );
 
-    return res.send('\uFEFF' + csv);
+    return res.send(fileBuffer);
   }
 
   @Post('seller/bulk-upload')
   @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileInterceptor('file'))
-  async uploadSellerProductsCsv(
+  async uploadSellerProductsExcel(
     @Req() req: { user: { userId: string } },
     @UploadedFile() file: Express.Multer.File,
   ) {
@@ -74,7 +82,7 @@ export class ProductsController {
       throw new BadRequestException('Файл не загружен');
     }
 
-    return this.productsService.bulkUploadFromCsv(req.user.userId, file);
+    return this.productsService.bulkUploadFromExcel(req.user.userId, file);
   }
 
   @Get(':slug')

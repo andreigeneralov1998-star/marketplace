@@ -68,8 +68,21 @@ export class SellerWithdrawalsService {
         throw new BadRequestException('Сумма превышает доступный баланс');
       }
 
+      const lastRequest = await tx.sellerWithdrawalRequest.findFirst({
+        where: {
+          requestNumber: { not: null },
+        },
+        orderBy: { requestNumber: 'desc' },
+        select: { requestNumber: true },
+      });
+
+      const nextRequestNumber = lastRequest?.requestNumber
+        ? lastRequest.requestNumber + 1
+        : 100000;
+
       return tx.sellerWithdrawalRequest.create({
         data: {
+          requestNumber: nextRequestNumber,
           sellerId,
           amount: amountInCents,
           method: SellerWithdrawalMethod.TOPSET_BALANCE,
@@ -95,8 +108,21 @@ export class SellerWithdrawalsService {
         throw new BadRequestException('Сумма превышает доступный баланс');
       }
 
+      const lastRequest = await tx.sellerWithdrawalRequest.findFirst({
+        where: {
+          requestNumber: { not: null },
+        },
+        orderBy: { requestNumber: 'desc' },
+        select: { requestNumber: true },
+      });
+
+      const nextRequestNumber = lastRequest?.requestNumber
+        ? lastRequest.requestNumber + 1
+        : 100000;
+
       return tx.sellerWithdrawalRequest.create({
         data: {
+          requestNumber: nextRequestNumber,
           sellerId,
           amount: amountInCents,
           method: SellerWithdrawalMethod.TOPSET_CASH,

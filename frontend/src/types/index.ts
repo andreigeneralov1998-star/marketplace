@@ -7,7 +7,9 @@ export interface Category {
   createdAt?: string;
   updatedAt?: string;
 }
-
+export interface CategoryWithCount extends Category {
+  count: number;
+}
 export interface ProductImage {
   id: string;
   url: string;

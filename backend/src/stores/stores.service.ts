@@ -55,9 +55,7 @@ export class StoresService {
         role: 'SELLER',
         isSellerApproved: true,
         isProfileComplete: true,
-        storeSlug: {
-          not: null,
-        },
+        storeSlug,
       },
       select: {
         id: true,

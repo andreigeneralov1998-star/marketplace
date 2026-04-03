@@ -57,8 +57,21 @@ export class OrdersService {
     }, 0);
 
     const order = await this.prisma.$transaction(async (tx) => {
+      const lastOrder = await tx.order.findFirst({
+        where: {
+          orderNumber: { not: null },
+        },
+        orderBy: { orderNumber: 'desc' },
+        select: { orderNumber: true },
+      });
+
+      const nextOrderNumber = lastOrder?.orderNumber
+        ? lastOrder.orderNumber + 1
+        : 300000;
+
       const createdOrder = await tx.order.create({
         data: {
+          orderNumber: nextOrderNumber,
           userId,
           total,
           fullName: dto.fullName,
@@ -120,28 +133,41 @@ export class OrdersService {
   }
 
   async findMyOrders(userId: string, query: QueryOrdersDto) {
-    const where: any = {
-      userId,
-    };
+    const where: any = { userId };
 
     if (query.dateFrom || query.dateTo) {
       where.createdAt = {};
     }
 
     if (query.dateFrom) {
-      where.createdAt.gte = new Date(`${query.dateFrom}T00:00:00.000Z`);
+      const from = new Date(`${query.dateFrom}T00:00:00.000Z`);
+
+      if (Number.isNaN(from.getTime())) {
+        throw new BadRequestException('Некорректная дата "dateFrom"');
+      }
+
+      where.createdAt.gte = from;
     }
 
     if (query.dateTo) {
-      where.createdAt.lte = new Date(`${query.dateTo}T23:59:59.999Z`);
+      const to = new Date(`${query.dateTo}T23:59:59.999Z`);
+
+      if (Number.isNaN(to.getTime())) {
+        throw new BadRequestException('Некорректная дата "dateTo"');
+      }
+
+      where.createdAt.lte = to;
     }
 
     return this.prisma.order.findMany({
       where,
       include: {
         items: {
-          include: {
-            product: true,
+          select: {
+            id: true,
+            titleSnapshot: true,
+            quantity: true,
+            priceSnapshot: true,
           },
         },
       },
@@ -208,9 +234,10 @@ export class OrdersService {
 
     if (query.search?.trim()) {
       const search = query.search.trim();
+      const searchNumber = Number(search);
 
       where.OR = [
-        { id: { contains: search } },
+        ...(Number.isNaN(searchNumber) ? [] : [{ orderNumber: searchNumber }]),
         { user: { email: { contains: search } } },
         {
           items: {
@@ -260,6 +287,7 @@ export class OrdersService {
 
         return {
           id: order.id,
+          orderNumber: order.orderNumber,
           status: derivedStatus,
           createdAt: order.createdAt,
           totalAmount: Number(order.total),
@@ -329,6 +357,7 @@ export class OrdersService {
 
     return {
       id: order.id,
+      orderNumber: order.orderNumber,
       status: derivedStatus,
       createdAt: order.createdAt,
       totalAmount: Number(order.total),

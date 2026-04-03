@@ -12,7 +12,7 @@ import { Type } from 'class-transformer';
 
 export class CreateProductDto {
   @IsString()
-  @MaxLength(50, { message: 'Наименование товара должно быть не более 50 символов' })
+  @MaxLength(100, { message: 'Наименование товара должно быть не более 100 символов' })
   title!: string;
 
   @IsOptional()
@@ -38,7 +38,7 @@ export class CreateProductDto {
   stock!: number;
 
   @IsString()
-  @MaxLength(300, { message: 'Описание должно быть не более 300 символов' })
+  @MaxLength(600, { message: 'Описание должно быть не более 600 символов' })
   description!: string;
 
   @IsOptional()
