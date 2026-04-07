@@ -151,6 +151,18 @@ const ruTranslations = {
     forbiddenError: 'У вас нет доступа к этому действию',
   },
   resources: {
+    FeedbackMessage: {
+      name: 'Обратная связь',
+      properties: {
+        id: 'ID',
+        name: 'Имя',
+        contact: 'Контакт',
+        message: 'Сообщение',
+        status: 'Статус',
+        createdAt: 'Создано',
+        updatedAt: 'Обновлено',
+      },
+    },
     HomepageBanner: {
       name: 'Баннеры главной',
       properties: {
@@ -339,6 +351,11 @@ export async function buildAdminRouter() {
   const bannerImageUploadComponent = componentLoader.add(
     'BannerImageUploadV2',
     './admin/components/banner-image-upload',
+    'buildAdminRouter',
+  );
+  const productModerationStatusBadge = componentLoader.add(
+    'ProductModerationStatusBadge',
+    './admin/components/product-moderation-status-badge',
     'buildAdminRouter',
   );
 
@@ -1252,6 +1269,10 @@ export async function buildAdminRouter() {
             moderationStatusLabel: {
               label: 'Статус модерации',
               isVisible: { list: true, show: true, filter: false, edit: false },
+              components: {
+                list: productModerationStatusBadge,
+                show: productModerationStatusBadge,
+              },
             },
             isPublishedLabel: {
               label: 'Опубликован',
@@ -1361,7 +1382,7 @@ export async function buildAdminRouter() {
                 };
               },
             },
-            
+
             reject: {
               actionType: 'record',
               label: 'Отклонить',
@@ -1463,6 +1484,10 @@ export async function buildAdminRouter() {
                 };
               },
             },
+          },
+          sort: {
+            sortBy: 'createdAt',
+            direction: 'desc',
           },
         },
       },
@@ -1784,6 +1809,232 @@ export async function buildAdminRouter() {
             edit: { isAccessible: false },
             new: { isAccessible: false },
             delete: { isAccessible: false },
+          },
+        },
+      },
+      {
+        resource: { model: getModelByName('FeedbackMessage'), client: prisma },
+        options: {
+          label: 'Обратная связь',
+          navigation: {
+            name: 'Поддержка',
+            icon: 'Chat',
+          },
+          listProperties: [
+            'createdAtFormatted',
+            'name',
+            'contact',
+            'statusLabel',
+            'messageShort',
+          ],
+          filterProperties: [
+            'status',
+            'name',
+            'contact',
+            'createdAt',
+          ],
+          showProperties: [
+            'id',
+            'createdAtFormatted',
+            'updatedAtFormatted',
+            'name',
+            'contact',
+            'statusLabel',
+            'message',
+          ],
+          editProperties: ['status'],
+          properties: {
+            id: {
+              label: 'ID',
+              isVisible: { list: false, filter: false, show: true, edit: false },
+            },
+            name: {
+              label: 'Имя',
+            },
+            contact: {
+              label: 'Контакт',
+            },
+            message: {
+              label: 'Сообщение',
+              type: 'textarea',
+              isVisible: { list: false, filter: false, show: true, edit: false },
+            },
+            messageShort: {
+              label: 'Сообщение',
+              isVisible: { list: true, filter: false, show: false, edit: false },
+            },
+            status: {
+              label: 'Статус',
+              availableValues: [
+                { value: 'NEW', label: 'Новое' },
+                { value: 'IN_PROGRESS', label: 'В работе' },
+                { value: 'DONE', label: 'Закрыто' },
+              ],
+              isVisible: { list: false, filter: true, show: false, edit: true },
+            },
+            statusLabel: {
+              label: 'Статус',
+              isVisible: { list: true, filter: false, show: true, edit: false },
+            },
+            createdAt: {
+              label: 'Создано',
+              isVisible: { list: false, filter: true, show: false, edit: false },
+            },
+            createdAtFormatted: {
+              label: 'Создано',
+              isVisible: { list: true, filter: false, show: true, edit: false },
+            },
+            updatedAtFormatted: {
+              label: 'Обновлено',
+              isVisible: { list: false, filter: false, show: true, edit: false },
+            },
+            updatedAt: {
+              label: 'Обновлено',
+              isVisible: false,
+            },
+          },
+          actions: {
+            list: {
+              after: async (response) => {
+                if (response.records) {
+                  response.records = response.records.map((record) => {
+                    const message = String(record.params.message ?? '');
+                    const status = String(record.params.status ?? '');
+
+                    record.params.messageShort =
+                      message.length > 120 ? `${message.slice(0, 120)}...` : message;
+
+                    record.params.statusLabel =
+                      status === 'NEW'
+                        ? 'Новое'
+                        : status === 'IN_PROGRESS'
+                        ? 'В работе'
+                        : status === 'DONE'
+                        ? 'Закрыто'
+                        : status;
+
+                    record.params.createdAtFormatted = formatDateTime(record.params.createdAt);
+                    record.params.updatedAtFormatted = formatDateTime(record.params.updatedAt);
+
+                    return record;
+                  });
+                }
+
+                return response;
+              },
+            },
+
+            show: {
+              after: async (response) => {
+                if (response.record) {
+                  const status = String(response.record.params.status ?? '');
+
+                  response.record.params.statusLabel =
+                    status === 'NEW'
+                      ? 'Новое'
+                      : status === 'IN_PROGRESS'
+                      ? 'В работе'
+                      : status === 'DONE'
+                      ? 'Закрыто'
+                      : status;
+
+                  response.record.params.createdAtFormatted = formatDateTime(
+                    response.record.params.createdAt,
+                  );
+                  response.record.params.updatedAtFormatted = formatDateTime(
+                    response.record.params.updatedAt,
+                  );
+                }
+
+                return response;
+              },
+            },
+
+            new: { isAccessible: false },
+            delete: { isAccessible: false },
+
+            edit: {
+              label: 'Изменить статус',
+            },
+
+            markInProgress: {
+              actionType: 'record',
+              label: 'В работу',
+              icon: 'Play',
+              component: false,
+              isAccessible: ({ currentAdmin, record }) =>
+                currentAdmin?.role === 'ADMIN' &&
+                record?.params?.status !== 'IN_PROGRESS' &&
+                record?.params?.status !== 'DONE',
+              handler: async (_request, _response, context) => {
+                const { record, resource, currentAdmin } = context;
+
+                if (!record) {
+                  return {
+                    notice: {
+                      message: 'Обращение не найдено',
+                      type: 'error',
+                    },
+                  };
+                }
+
+                await prisma.feedbackMessage.update({
+                  where: { id: String(record.params.id) },
+                  data: { status: 'IN_PROGRESS' },
+                });
+
+                const updatedRecord = await resource.findOne(String(record.params.id));
+
+                return {
+                  record: updatedRecord?.toJSON(currentAdmin),
+                  notice: {
+                    message: 'Обращение переведено в работу',
+                    type: 'success',
+                  },
+                };
+              },
+            },
+
+            markDone: {
+              actionType: 'record',
+              label: 'Закрыть',
+              icon: 'Checkmark',
+              component: false,
+              isAccessible: ({ currentAdmin, record }) =>
+                currentAdmin?.role === 'ADMIN' &&
+                record?.params?.status !== 'DONE',
+              handler: async (_request, _response, context) => {
+                const { record, resource, currentAdmin } = context;
+
+                if (!record) {
+                  return {
+                    notice: {
+                      message: 'Обращение не найдено',
+                      type: 'error',
+                    },
+                  };
+                }
+
+                await prisma.feedbackMessage.update({
+                  where: { id: String(record.params.id) },
+                  data: { status: 'DONE' },
+                });
+
+                const updatedRecord = await resource.findOne(String(record.params.id));
+
+                return {
+                  record: updatedRecord?.toJSON(currentAdmin),
+                  notice: {
+                    message: 'Обращение закрыто',
+                    type: 'success',
+                  },
+                };
+              },
+            },
+          },
+          sort: {
+            sortBy: 'createdAt',
+            direction: 'desc',
           },
         },
       },

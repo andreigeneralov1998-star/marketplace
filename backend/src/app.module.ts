@@ -12,6 +12,7 @@ import { SellerBalanceModule } from './seller-balance/seller-balance.module';
 import { SellerWithdrawalsModule } from './seller-withdrawals/seller-withdrawals.module';
 import { UsersModule } from './users/users.module';
 import { HomepageBannersModule } from './homepage-banners/homepage-banners.module';
+import { FeedbackModule } from './feedback/feedback.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { HomepageBannersModule } from './homepage-banners/homepage-banners.modul
     CartModule,
     SellerWithdrawalsModule,
     HomepageBannersModule,
+    FeedbackModule,
   ],
 })
 export class AppModule {}
