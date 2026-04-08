@@ -13,7 +13,11 @@ type SearchParams = {
   page?: string;
   sellerId?: string;
   storeSlug?: string;
+  view?: string;
 };
+
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 'https://rnk.by/api';
 
 function buildProductsUrl(searchParams: SearchParams) {
   const params = new URLSearchParams();
@@ -27,7 +31,7 @@ function buildProductsUrl(searchParams: SearchParams) {
   if (searchParams.page) params.set('page', searchParams.page);
   params.set('limit', '12');
 
-  return `http://localhost:4000/api/products?${params.toString()}`;
+  return `${API_URL}/products?${params.toString()}`;
 }
 
 async function getProducts(searchParams: SearchParams): Promise<ProductsResponse> {
@@ -52,14 +56,11 @@ async function getCategoryCounts(
   if (searchParams.maxPrice) params.set('maxPrice', searchParams.maxPrice);
   if (searchParams.inStock) params.set('inStock', searchParams.inStock);
   if (searchParams.sellerId) params.set('sellerId', searchParams.sellerId);
-  if ((searchParams as any).storeSlug) params.set('storeSlug', (searchParams as any).storeSlug);
+  if (searchParams.storeSlug) params.set('storeSlug', searchParams.storeSlug);
 
-  const res = await fetch(
-    `http://localhost:4000/api/products/category-counts?${params.toString()}`,
-    {
-      cache: 'no-store',
-    },
-  );
+  const res = await fetch(`${API_URL}/products/category-counts?${params.toString()}`, {
+    cache: 'no-store',
+  });
 
   if (!res.ok) {
     return [];
@@ -77,11 +78,16 @@ function buildPageLink(searchParams: SearchParams, nextPage: number) {
   if (searchParams.maxPrice) params.set('maxPrice', searchParams.maxPrice);
   if (searchParams.inStock) params.set('inStock', searchParams.inStock);
   if (searchParams.sort) params.set('sort', searchParams.sort);
+  if (searchParams.view) params.set('view', searchParams.view);
   params.set('page', String(nextPage));
 
   return `/catalog?${params.toString()}`;
 }
-function buildCatalogLink(searchParams: SearchParams, overrides: Partial<SearchParams> = {}) {
+
+function buildCatalogLink(
+  searchParams: SearchParams,
+  overrides: Partial<SearchParams> = {},
+) {
   const params = new URLSearchParams();
 
   const nextParams: SearchParams = {
@@ -98,6 +104,7 @@ function buildCatalogLink(searchParams: SearchParams, overrides: Partial<SearchP
   if (nextParams.sellerId) params.set('sellerId', nextParams.sellerId);
   if (nextParams.storeSlug) params.set('storeSlug', nextParams.storeSlug);
   if (nextParams.page) params.set('page', nextParams.page);
+  if (nextParams.view) params.set('view', nextParams.view);
 
   const query = params.toString();
   return query ? `/catalog?${query}` : '/catalog';
@@ -109,6 +116,7 @@ export default async function CatalogPage({
   searchParams: Promise<SearchParams>;
 }) {
   const resolvedSearchParams = await searchParams;
+  const currentView = resolvedSearchParams.view === 'list' ? 'list' : 'grid';
 
   const [{ items: products, total, page, pages }, categories] = await Promise.all([
     getProducts(resolvedSearchParams),
@@ -142,6 +150,9 @@ export default async function CatalogPage({
         {resolvedSearchParams.category ? (
           <input type="hidden" name="category" value={resolvedSearchParams.category} />
         ) : null}
+
+        <input type="hidden" name="view" value={currentView} />
+
         <div className="grid gap-4 xl:grid-cols-5">
           <div className="xl:col-span-2">
             <label className="mb-2 block text-[13px] font-semibold text-[#111827]">
@@ -235,7 +246,7 @@ export default async function CatalogPage({
         </div>
       </form>
 
-            <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start">
+      <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start">
         <aside className="h-fit rounded-[20px] border border-[#E5E7EB] bg-white p-4">
           <div className="mb-4 text-sm font-semibold text-[#111827]">Категории</div>
 
@@ -284,25 +295,61 @@ export default async function CatalogPage({
         </aside>
 
         <div className="grid gap-4">
-          {resolvedSearchParams.category ? (
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex rounded-full bg-[#FFF4DD] px-3 py-1 text-xs font-semibold text-[#1F2937]">
-                Категория:{' '}
-                {categories.find((item) => item.slug === resolvedSearchParams.category)?.name ??
-                  resolvedSearchParams.category}
-              </span>
+              {resolvedSearchParams.category ? (
+                <>
+                  <span className="inline-flex rounded-full bg-[#FFF4DD] px-3 py-1 text-xs font-semibold text-[#1F2937]">
+                    Категория:{' '}
+                    {categories.find((item) => item.slug === resolvedSearchParams.category)?.name ??
+                      resolvedSearchParams.category}
+                  </span>
+
+                  <Link
+                    href={buildCatalogLink(resolvedSearchParams, {
+                      category: undefined,
+                      page: undefined,
+                    })}
+                    className="inline-flex rounded-full border border-[#E5E7EB] bg-white px-3 py-1 text-xs font-medium text-[#111827] transition hover:bg-[#F9FAFB]"
+                  >
+                    Сбросить категорию
+                  </Link>
+                </>
+              ) : (
+                <div />
+              )}
+            </div>
+
+            <div className="inline-flex items-center rounded-2xl border border-[#E5E7EB] bg-white p-1 shadow-[0_6px_18px_rgba(15,23,42,0.05)]">
+              <Link
+                href={buildCatalogLink(resolvedSearchParams, {
+                  view: 'grid',
+                  page: undefined,
+                })}
+                className={`inline-flex h-10 items-center justify-center rounded-xl px-4 text-sm font-semibold transition ${
+                  currentView === 'grid'
+                    ? 'bg-[#FFF4DD] text-[#1F2937]'
+                    : 'text-[#6B7280] hover:bg-[#F9FAFB]'
+                }`}
+              >
+                Плитка
+              </Link>
 
               <Link
                 href={buildCatalogLink(resolvedSearchParams, {
-                  category: undefined,
+                  view: 'list',
                   page: undefined,
                 })}
-                className="inline-flex rounded-full border border-[#E5E7EB] bg-white px-3 py-1 text-xs font-medium text-[#111827] transition hover:bg-[#F9FAFB]"
+                className={`inline-flex h-10 items-center justify-center rounded-xl px-4 text-sm font-semibold transition ${
+                  currentView === 'list'
+                    ? 'bg-[#FFF4DD] text-[#1F2937]'
+                    : 'text-[#6B7280] hover:bg-[#F9FAFB]'
+                }`}
               >
-                Сбросить категорию
+                Список
               </Link>
             </div>
-          ) : null}
+          </div>
 
           {products.length === 0 ? (
             <div className="rounded-[20px] border border-dashed border-[#E5E7EB] bg-white px-6 py-12 text-center">
@@ -322,13 +369,41 @@ export default async function CatalogPage({
                 </Link>
               </div>
             </div>
+          ) : currentView === 'list' ? (
+            <div className="grid grid-cols-1 gap-4">
+              {products.map((product) => (
+                <ProductCard key={product.id} product={product} view="list" />
+              ))}
+            </div>
           ) : (
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
               {products.map((product) => (
-                <ProductCard key={product.id} product={product} />
+                <ProductCard key={product.id} product={product} view="grid" />
               ))}
             </div>
           )}
+
+          {pages > 1 ? (
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+              {Array.from({ length: pages }, (_, index) => index + 1).map((pageNumber) => {
+                const isActive = pageNumber === page;
+
+                return (
+                  <Link
+                    key={pageNumber}
+                    href={buildPageLink(resolvedSearchParams, pageNumber)}
+                    className={`inline-flex h-11 min-w-[44px] items-center justify-center rounded-xl px-4 text-sm font-semibold transition ${
+                      isActive
+                        ? 'bg-[#111827] text-white'
+                        : 'border border-[#E5E7EB] bg-white text-[#111827] hover:bg-[#F9FAFB]'
+                    }`}
+                  >
+                    {pageNumber}
+                  </Link>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
       </div>
     </section>

@@ -11,7 +11,7 @@ import { api } from '@/lib/api';
 import { formatPrice } from '@/lib/utils';
 import { PageTitle } from '@/components/ui/page-title';
 
-type DeliveryMethod = 'EMS' | 'EUROPOCHTA' | 'BELPOCHTA' | 'PICKUP_TOPSET';
+type DeliveryMethod = 'PICKUP_TOPSET' | 'TOPSET_DELIVERY';
 
 type CartItem = {
   id: string;
@@ -49,22 +49,10 @@ const DELIVERY_OPTIONS: {
   icon: typeof Truck;
 }[] = [
   {
-    value: 'EMS',
-    title: 'EMS',
-    description: 'Быстрая доставка по адресу получателя.',
+    value: 'TOPSET_DELIVERY',
+    title: 'Доставка через TOPSET',
+    description: 'Доставка заказа через службу TOPSET по указанному адресу.',
     icon: Truck,
-  },
-  {
-    value: 'EUROPOCHTA',
-    title: 'Европочта',
-    description: 'Получение через отделение Европочты.',
-    icon: Package,
-  },
-  {
-    value: 'BELPOCHTA',
-    title: 'Белпочта',
-    description: 'Доставка через отделение Белпочты.',
-    icon: Package,
   },
   {
     value: 'PICKUP_TOPSET',
@@ -98,7 +86,7 @@ export default function CheckoutPage() {
     house: '',
     fullAddress: '',
     comment: '',
-    deliveryMethod: 'EMS',
+    deliveryMethod: 'PICKUP_TOPSET',
   });
 
   const isPickup = form.deliveryMethod === 'PICKUP_TOPSET';
@@ -514,7 +502,7 @@ export default function CheckoutPage() {
                   value={form.comment}
                   onChange={handleChange}
                   rows={5}
-                  placeholder="Например, позвонить перед доставкой или уточнить удобное время"
+                  placeholder="Введите название пункта самовывоза TOPSET или название учетной записи. Например: Радиорынок, Гомель Иванон, Брест Сидоров, БЦ Время и т.д."
                   className="min-h-[120px] w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm text-[#111827] outline-none transition focus:border-[#F5A623] focus:shadow-[0_0_0_4px_rgba(245,166,35,0.14)]"
                 />
               </label>

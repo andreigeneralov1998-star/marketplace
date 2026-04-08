@@ -36,10 +36,8 @@ enum OrderStatus {
 }
 
 enum DeliveryMethod {
-  EMS
-  EUROPOCHTA
-  BELPOCHTA
   PICKUP_TOPSET
+  TOPSET_DELIVERY
 }
 
 enum SellerWithdrawalMethod {
